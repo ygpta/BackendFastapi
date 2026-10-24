@@ -3,6 +3,7 @@
 from backendfastapi.db.models.agents import (
     AgentRun,
     Document,
+    EmbeddingCache,
     Evaluation,
     Feedback,
     PromptVersion,
@@ -27,6 +28,7 @@ __all__ = [
     "ChatMessage",
     "Conversation",
     "Document",
+    "EmbeddingCache",
     "Evaluation",
     "Feedback",
     "IdempotencyRecord",

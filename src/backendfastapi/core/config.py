@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     worker_lease_seconds: int = Field(default=90, ge=30, le=300)
     worker_poll_seconds: float = Field(default=1, ge=0.1, le=30)
     worker_max_attempts: int = Field(default=3, ge=1, le=5)
+    worker_concurrency: int = Field(default=4, ge=1, le=16)
     otel_enabled: bool = False
     otel_endpoint: str = "http://otel-collector:4318/v1/traces"
     allowed_hosts: list[str] = ["localhost", "127.0.0.1", "testserver"]
@@ -46,6 +47,11 @@ class Settings(BaseSettings):
     chat_enabled: bool = False
     openai_api_key: SecretStr | None = None
     openai_model: str = "gpt-4.1-mini"
+    llm_provider: Literal["openai", "xai", "ollama"] = "openai"
+    llm_api_key: SecretStr | None = None
+    llm_base_url: str | None = None
+    llm_model: str | None = None
+    openai_embedding_model: str = "text-embedding-3-small"
     chat_timeout_seconds: float = Field(default=30, gt=0, le=120)
     chat_max_history_messages: int = Field(default=20, ge=1, le=100)
     chat_max_output_tokens: int = Field(default=1024, ge=1, le=4096)
@@ -54,18 +60,61 @@ class Settings(BaseSettings):
     @classmethod
     def normalize_optional_secrets(cls, values):
         # Compose passes empty strings when optional secrets are not configured.
-        for key in ("api_key", "openai_api_key", "jwt_secret"):
+        for key in (
+            "api_key",
+            "openai_api_key",
+            "llm_api_key",
+            "jwt_secret",
+            "llm_base_url",
+            "llm_model",
+        ):
             if values.get(key) == "":
                 values[key] = None
         return values
+
+    @property
+    def chat_model(self) -> str:
+        return self.llm_model or self.openai_model
+
+    @property
+    def chat_api_key(self) -> SecretStr:
+        if self.llm_provider == "ollama":
+            return self.llm_api_key or SecretStr("ollama")
+        key = self.llm_api_key or self.openai_api_key
+        if key is None:
+            raise ValueError("LLM_API_KEY is required for the selected provider")
+        return key
+
+    @property
+    def chat_base_url(self) -> str | None:
+        if self.llm_base_url:
+            return self.llm_base_url.rstrip("/")
+        if self.llm_provider == "xai":
+            return "https://api.x.ai/v1"
+        if self.llm_provider == "ollama":
+            return "http://localhost:11434/v1"
+        return None
 
     @model_validator(mode="after")
     def validate_deployment(self) -> "Settings":
         database = make_url(self.database_url)
         if database.drivername != "postgresql+asyncpg":
             raise ValueError("DATABASE_URL must use postgresql+asyncpg")
-        if self.chat_enabled and not self.openai_api_key:
-            raise ValueError("OPENAI_API_KEY is required when CHAT_ENABLED=true")
+        if self.chat_enabled and self.llm_provider != "ollama":
+            if not self.llm_api_key and not self.openai_api_key:
+                credential = (
+                    "LLM_API_KEY is required when LLM_PROVIDER=xai"
+                    if self.llm_provider == "xai"
+                    else (
+                        "OPENAI_API_KEY is required when CHAT_ENABLED=true "
+                        "(or set LLM_API_KEY)"
+                    )
+                )
+                raise ValueError(credential)
+        if self.chat_enabled and self.llm_provider != "openai" and not self.llm_model:
+            raise ValueError(
+                f"LLM_MODEL is required when LLM_PROVIDER={self.llm_provider}"
+            )
         if self.auth_enabled and (
             not self.jwt_secret or len(self.jwt_secret.get_secret_value()) < 48
         ):

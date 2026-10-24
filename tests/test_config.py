@@ -124,6 +124,45 @@ def test_chat_requires_provider_credentials():
         Settings(_env_file=None, chat_enabled=True, openai_api_key=None)
 
 
+def test_ollama_chat_does_not_require_provider_api_key():
+    settings = Settings(
+        _env_file=None,
+        chat_enabled=True,
+        llm_provider="ollama",
+        llm_model="qwen2.5:7b",
+    )
+    assert settings.chat_api_key.get_secret_value() == "ollama"
+    assert settings.chat_base_url == "http://localhost:11434/v1"
+
+
+def test_xai_chat_uses_compatible_api_defaults():
+    settings = Settings(
+        _env_file=None,
+        chat_enabled=True,
+        llm_provider="xai",
+        llm_api_key="test-xai-key",
+        llm_model="grok-test",
+    )
+    assert settings.chat_api_key.get_secret_value() == "test-xai-key"
+    assert settings.chat_base_url == "https://api.x.ai/v1"
+    assert settings.chat_model == "grok-test"
+
+
+def test_provider_base_url_can_be_overridden():
+    settings = Settings(
+        _env_file=None,
+        llm_provider="ollama",
+        llm_model="qwen2.5:7b",
+        llm_base_url="http://ollama:11434/v1/",
+    )
+    assert settings.chat_base_url == "http://ollama:11434/v1"
+
+
+def test_non_openai_provider_requires_explicit_model():
+    with pytest.raises(ValidationError, match="LLM_MODEL is required"):
+        Settings(_env_file=None, chat_enabled=True, llm_provider="ollama")
+
+
 def test_validation_errors_do_not_print_secrets():
     with pytest.raises(ValidationError) as error:
         Settings(_env_file=None, api_key="private-weak-key")

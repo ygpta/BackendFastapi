@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 15
     services:
       postgres:
-        image: postgres:17-alpine
+        image: pgvector/pgvector:pg17
         env:
           POSTGRES_USER: app
           POSTGRES_PASSWORD: ci-only-password

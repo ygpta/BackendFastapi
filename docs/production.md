@@ -37,12 +37,18 @@ without approval.
 | `CORS_ORIGINS` | JSON array; defaults to no cross-origin browser access |
 | `CHAT_ENABLED` | `false`; enabling requires `OPENAI_API_KEY` |
 | `OPENAI_MODEL` | `gpt-4.1-mini`; choose an approved accessible chat model |
+| `LLM_PROVIDER` | `openai`; alternatively `xai` or `ollama` |
+| `LLM_API_KEY` | Required for xAI/Grok; Ollama does not require a provider key |
+| `LLM_MODEL` | Explicit model name required for xAI/Grok and Ollama |
+| `LLM_BASE_URL` | Optional OpenAI-compatible provider base URL override |
 | `CHAT_TIMEOUT_SECONDS` | `30`; overall workflow deadline, max 120 |
 | `CHAT_MAX_HISTORY_MESSAGES` | `20`; max 100; dangling assistant turn omitted |
 | `CHAT_MAX_OUTPUT_TOKENS` | `1024`; max 4096 |
 | `DATABASE_POOL_SIZE` | `5` per worker |
 | `DATABASE_MAX_OVERFLOW` | `10` per worker |
 | `DATABASE_TIMEOUT_SECONDS` | `10`; pool, connection, command/statement timeout |
+| `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small`; semantic retrieval uses 1536 dimensions |
+| `WORKER_CONCURRENCY` | `4`; maximum simultaneous durable runs per worker process |
 | `LOG_LEVEL` | `INFO`; JSON application/access events |
 | `MAX_REQUEST_BODY_BYTES` | `32768`; allowed range 1 KiB-10 MiB |
 
@@ -134,6 +140,11 @@ export AUTH_ENABLED=true
 docker compose -f compose.yaml -f compose.production.yaml up --build -d
 ```
 
+For xAI/Grok or Ollama, set `LLM_PROVIDER`, `LLM_MODEL`, and the applicable
+`LLM_API_KEY`/`LLM_BASE_URL`. Ollama must be reachable from both API and worker
+containers. Semantic retrieval still uses the configured OpenAI embedding model;
+without `OPENAI_API_KEY`, document search falls back to PostgreSQL full-text search.
+
 Requires Compose v2.24.4+ for `!reset`. Include `127.0.0.1` in allowed hosts for
 container probes. The override removes the DB host port; the API binds to host
 loopback. Place a trusted gateway in front. For managed PostgreSQL, deploy just
@@ -146,7 +157,8 @@ deadline. Set model spending alerts. Uvicorn concurrency limits are not a rate
 limiter. The image ignores forwarded headers; enable them only with explicitly
 trusted proxy IPs in your deployment command.
 
-The image runs one worker. Scale replicas and budget DB connections as
+The worker runs up to `WORKER_CONCURRENCY` jobs concurrently. Scale replicas and
+budget DB connections as
 `replicas * workers * (pool_size + max_overflow)`, plus migration/admin connections.
 Tune concurrency and memory under realistic load. SIGTERM permits 40 seconds for
 in-flight requests; Compose allows 45 seconds. Increase both for longer chat

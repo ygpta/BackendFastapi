@@ -21,6 +21,7 @@ from backendfastapi.db.models import (
     ChatMessage,
     Conversation,
     Document,
+    EmbeddingCache,
     PromptVersion,
     Ticket,
 )
@@ -93,6 +94,47 @@ def test_postgres_migrations_and_concurrent_writers():
         factory = async_sessionmaker(engine, expire_on_commit=False)
         conversation_id = uuid4()
         try:
+            embed_calls = []
+
+            async def embed_query(query):
+                embed_calls.append(query)
+                return [1.0] + [0.0] * 1535
+
+            async with factory() as session:
+                session.info["tenant_id"] = "semantic-test"
+                session.add(
+                    Document(
+                        id="semantic-fusion-document",
+                        tenant_id="semantic-test",
+                        title="Semantic document",
+                        content="a distinct lexical phrase",
+                        embedding=[1.0] + [0.0] * 1535,
+                        embedding_model="text-embedding-3-small",
+                    ),
+                    Document(
+                        id="lexical-fusion-document",
+                        tenant_id="semantic-test",
+                        title="Lexical document",
+                        content="semantic query lexical match",
+                    ),
+                )
+                await session.commit()
+                found = await retrieve(
+                    session, "semantic query", limit=3, embedding_provider=embed_query
+                )
+                await session.commit()
+                repeated = await retrieve(
+                    session, "semantic query", limit=3, embedding_provider=embed_query
+                )
+                await session.commit()
+                assert {item.title for item in found} == {
+                    "Semantic document",
+                    "Lexical document",
+                }
+                assert {item.id for item in repeated} == {item.id for item in found}
+                assert embed_calls == ["semantic query"]
+                assert await session.scalar(select(EmbeddingCache.id)) is not None
+
             async with factory() as session:
                 await save_turn(session, conversation_id, "owner", None, "Hello", "Hi")
 

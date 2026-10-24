@@ -5,8 +5,10 @@
 Implemented: Argon2/JWT login, rotating revocable sessions, admin/operator/viewer
 roles, tenant-scoped ORM sessions, shared rate/spend controls, idempotent jobs and
 ticket creation, audits, leased workers, official LangGraph PostgreSQL checkpoints,
-SSE/cancellation, approved allowlisted tools, lexical RAG, prompt versions, feedback,
-deterministic evaluations, OTLP tracing, alert rules and a k6 scenario.
+SSE/cancellation, approved allowlisted tools, pgvector semantic and lexical RAG,
+tenant-scoped embedding caching, bounded batch run submission, JWT-authenticated
+run webhooks, prompt versions, feedback, deterministic evaluations, OTLP tracing,
+alert rules and a k6 scenario.
 
 These are bounded implementations, not guarantees of arbitrary-agent safety,
 exactly-once external actions, semantic answer quality or invoice accuracy.
@@ -24,7 +26,9 @@ docker compose --profile agent up --build -d
 ```
 
 For real generation set `CHAT_ENABLED=true`, `OPENAI_API_KEY` and an approved
-`OPENAI_MODEL`, then recreate API/worker. Default prices match the default model;
+`OPENAI_MODEL`, then recreate API/worker. Semantic search uses
+`OPENAI_EMBEDDING_MODEL` (default `text-embedding-3-small`, 1536 dimensions).
+Default prices match the default model;
 set both price variables when changing it. There is no fake-provider production mode.
 
 Register locally with `POST /api/v1/auth/register`:
@@ -99,6 +103,8 @@ retries or deleting active-run keys.
 
 | Endpoint | Purpose |
 | --- | --- |
+| `POST /api/v1/runs/batch` | Up to 10 separately idempotent durable jobs |
+| `POST /api/v1/webhooks/runs` | JWT-authenticated webhook-compatible run submission |
 | `GET /api/v1/runs` | Recent tenant runs |
 | `GET /api/v1/runs/{id}` | State, output, safe error classification |
 | `GET /api/v1/runs/{id}/events` | Persisted SSE state/token batches |
@@ -143,6 +149,10 @@ ledger, not an invoice. Prices must match the model; provider-side budgets/alert
 are still required. Pending approvals retain reservations until approved/cancelled.
 The cap is per tenant, not a global provider-project budget.
 
+Embedding-provider calls for document ingestion and semantic queries are separate
+from durable run generation and are not included in the tenant run-budget ledger.
+Configure provider-side spending limits/alerts and control document ingestion access.
+
 ## Tools and Approval
 
 Only `resolve_ticket` exists. No arbitrary shell, code, network or browser tools.
@@ -163,9 +173,15 @@ sandbox/egress protocols before being added.
 
 ## Retrieval and Quality
 
-- `/knowledge/documents`: create/list; delete by ID. `/knowledge/search?query=...`
-  uses PostgreSQL GIN full-text search, not vector/semantic retrieval. Runs retrieve
-  up to three tenant documents with bounded snippets and source IDs/titles.
+- `/knowledge/documents`: create/list; delete by ID. When an embedding provider is
+  configured, new documents receive a 1536-dimensional embedding. `/knowledge/search`
+  and runs combine tenant-scoped pgvector cosine and PostgreSQL full-text candidate
+  rankings with reciprocal-rank fusion; without an embedding provider, retrieval is
+  lexical only. Query embeddings are cached per
+  tenant/model/query for seven days. Existing documents keep null embeddings after the
+  migration; admins can use `POST /knowledge/documents/{id}/embed` to embed them after
+  configuring the provider. Stored model IDs prevent comparisons across different
+  embedding models. SQLite tests retain lexical search only.
 - `/prompts`: admin creates immutable version IDs. POST `/prompts/{id}/activate`
   switches the default under a tenant lock and unique-active index. Runs snapshot
   prompt content/version; `builtin-v1` is the fallback.
@@ -178,7 +194,25 @@ sandbox/egress protocols before being added.
 Treat documents and generated text as untrusted; sanitize Markdown/links in clients.
 Source deletion prevents future retrieval but does not erase historical messages,
 run snapshots or checkpoints. Implement retention/erasure across those stores before
-processing regulated data. No embeddings pipeline or arbitrary document parser exists.
+processing regulated data. Document ingestion embeds the supplied bounded text;
+there is no file parser, chunking pipeline, reranker, or semantic-quality guarantee.
+The generic webhook accepts the same validated run request as the API and requires
+the caller's JWT and `Idempotency-Key`; provider-specific signature verification is
+not included.
+
+`POST /api/v1/runs/batch` accepts at most 10 jobs and creates separately budgeted,
+idempotent durable runs. Per-item failures are returned with HTTP 207; accepted runs
+remain queued. `WORKER_CONCURRENCY` bounds concurrent worker executions (default 4).
+Worker Prometheus metrics include `agent_time_to_first_token_seconds` and
+`agent_retrieval_duration_seconds`. The cache stores embeddings only, not generated
+answers, so budget accounting and conversation state are not bypassed.
+
+Set `"structured_output": true` on a run to request a JSON answer contract with
+`answer` and `citations`. The worker validates the completed model response using
+Pydantic and rejects citation IDs not present in retrieved tenant documents before
+committing the answer. In this opt-in mode, intermediate SSE `token` events contain
+the model's provisional JSON text; `structured_response` is emitted only after
+validation. Providers are not assumed to implement native JSON-schema mode.
 
 ## Audit, Tracing, Alerts and Load
 

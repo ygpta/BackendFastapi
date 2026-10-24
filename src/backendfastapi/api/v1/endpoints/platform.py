@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,8 +41,22 @@ Admin = Annotated[Principal, Depends(require_admin)]
 
 
 @router.post("/knowledge/documents", response_model=DocumentResponse, status_code=201)
-async def add_document(data: DocumentInput, session: Session):
-    record = Document(id=uuid4().hex, **data.model_dump())
+async def add_document(
+    data: DocumentInput,
+    session: Session,
+    request: Request,
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    embedding_client = getattr(request.app.state, "embedding_client", None)
+    embedding = (
+        await embedding_client.aembed_query(data.content) if embedding_client else None
+    )
+    record = Document(
+        id=uuid4().hex,
+        embedding=embedding,
+        embedding_model=settings.openai_embedding_model if embedding else None,
+        **data.model_dump(),
+    )
     session.add(record)
     audit(session, "document.created", record.id)
     await session.commit()
@@ -63,10 +77,21 @@ async def list_documents(
 @router.get("/knowledge/search", response_model=list[DocumentResponse])
 async def search_documents(
     session: Session,
+    request: Request,
+    settings: Annotated[Settings, Depends(get_settings)],
     query: Annotated[str, Query(min_length=1, max_length=500)],
     limit: Annotated[int, Query(ge=1, le=10)] = 3,
 ):
-    return await retrieve(session, query, limit)
+    embedding_client = getattr(request.app.state, "embedding_client", None)
+    results = await retrieve(
+        session,
+        query,
+        limit,
+        embedding_client.aembed_query if embedding_client else None,
+        settings.openai_embedding_model,
+    )
+    await session.commit()
+    return results
 
 
 @router.delete("/knowledge/documents/{document_id}", status_code=204)
@@ -78,6 +103,30 @@ async def remove_document(document_id: str, session: Session):
     audit(session, "document.deleted", document_id)
     await session.commit()
     return Response(status_code=204)
+
+
+@router.post(
+    "/knowledge/documents/{document_id}/embed",
+    response_model=DocumentResponse,
+)
+async def embed_document(
+    document_id: str,
+    session: Session,
+    request: Request,
+    admin: Admin,
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    embedding_client = getattr(request.app.state, "embedding_client", None)
+    if embedding_client is None:
+        raise HTTPException(503, "Embedding provider is not configured")
+    document = await session.get(Document, document_id)
+    if document is None:
+        raise HTTPException(404, "Document not found")
+    document.embedding = await embedding_client.aembed_query(document.content)
+    document.embedding_model = settings.openai_embedding_model
+    audit(session, "document.embedded", document.id)
+    await session.commit()
+    return document
 
 
 @router.post("/prompts", response_model=PromptResponse, status_code=201)

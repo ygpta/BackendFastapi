@@ -15,6 +15,10 @@ services:
       DATABASE_URL: ${DATABASE_URL:?Set the production asyncpg DATABASE_URL}
       API_KEY: ${API_KEY:?Set a random API_KEY of at least 32 characters}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:?Set a JSON array of trusted host names}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-}
 
   api:
     environment:
@@ -25,6 +29,10 @@ services:
       DATABASE_URL: ${DATABASE_URL:?Set the production asyncpg DATABASE_URL}
       API_KEY: ${API_KEY:?Set a random API_KEY of at least 32 characters}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:?Set a JSON array of trusted host names}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-}
 
   checkpoint-setup:
     environment:
@@ -35,6 +43,10 @@ services:
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
       API_KEY: ${API_KEY:?Set API_KEY}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:?Set ALLOWED_HOSTS}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-}
 
   worker:
     environment:
@@ -45,3 +57,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
       API_KEY: ${API_KEY:?Set API_KEY}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:?Set ALLOWED_HOSTS}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-}

@@ -13,3 +13,9 @@ Compose runs migration and checkpoint setup as one-shot jobs, not in each API wo
 
 Integration tests require `TEST_DATABASE_URL` pointing to a disposable PostgreSQL
 database. They downgrade and rebuild the schema; never use an application database.
+
+The semantic retrieval migration installs PostgreSQL's `vector` extension and
+requires a PostgreSQL image/server with pgvector available. The bundled Compose
+database and CI service use the pgvector PostgreSQL 17 image. For managed PostgreSQL,
+enable the extension before running migrations and verify the deployment role has
+permission to create it.

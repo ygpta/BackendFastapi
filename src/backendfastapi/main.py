@@ -30,6 +30,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     configure_logging(settings.log_level)
     application.state.chat_workflow = None
+    application.state.embedding_client = None
     async with AsyncExitStack() as resources:
         # Registered cleanup runs even if startup or a later resource fails.
         resources.push_async_callback(engine.dispose)
@@ -38,9 +39,10 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
             from starlette.concurrency import run_in_threadpool
 
             resources.push_async_callback(run_in_threadpool, provider.shutdown)
-        if settings.chat_enabled and not settings.auth_enabled:
-            from langchain_openai import ChatOpenAI
-
+        http_client = None
+        if settings.openai_api_key or (
+            settings.chat_enabled and not settings.auth_enabled
+        ):
             http_client = await resources.enter_async_context(
                 httpx.AsyncClient(
                     timeout=settings.chat_timeout_seconds,
@@ -49,9 +51,22 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
                     ),
                 )
             )
-            model = ChatOpenAI(
+        if settings.openai_api_key and http_client is not None:
+            from langchain_openai import OpenAIEmbeddings
+
+            application.state.embedding_client = OpenAIEmbeddings(
                 api_key=settings.openai_api_key,
-                model=settings.openai_model,
+                model=settings.openai_embedding_model,
+                dimensions=1536,
+                http_async_client=http_client,
+            )
+        if settings.chat_enabled and not settings.auth_enabled:
+            from langchain_openai import ChatOpenAI
+
+            model = ChatOpenAI(
+                api_key=settings.chat_api_key,
+                base_url=settings.chat_base_url,
+                model=settings.chat_model,
                 timeout=settings.chat_timeout_seconds,
                 max_retries=1,
                 max_tokens=settings.chat_max_output_tokens,

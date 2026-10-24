@@ -67,6 +67,7 @@ def test_worker_completes_and_checkpoints_run(client, session_factory):
 
     settings = Settings(_env_file=None, chat_enabled=True, openai_api_key="test-only")
     app.dependency_overrides[get_settings] = lambda: settings
+    ttft = []
     try:
         created = client.post(
             "/api/v1/runs",
@@ -77,17 +78,164 @@ def test_worker_completes_and_checkpoints_run(client, session_factory):
         run_id = created.json()["id"]
         saver = InMemorySaver()
         assert asyncio.run(
-            process_one(session_factory, saver, settings, lambda _: Model())
+            process_one(
+                session_factory,
+                saver,
+                settings,
+                lambda _: Model(),
+                ttft_observer=ttft.append,
+            )
         )
         result = client.get(f"/api/v1/runs/{run_id}").json()
         assert result["status"] == "succeeded", result
         assert result["output"]["text"] == "A helpful reply."
         assert result["output"]["usage"]["total_tokens"] == 35
         events = client.get(f"/api/v1/runs/{run_id}/events?follow=false").text
-        assert "event: token" in events and "event: succeeded" in events
+        assert (
+            "event: token" in events
+            and "event: first_token" in events
+            and "event: succeeded" in events
+        )
+        assert len(ttft) == 1 and ttft[0] >= 0
         assert not asyncio.run(
             process_one(session_factory, saver, settings, lambda _: Model())
         )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+
+def test_batch_runs_are_bounded_idempotent_and_report_partial_acceptance(client):
+    settings = Settings(
+        _env_file=None,
+        chat_enabled=True,
+        openai_api_key="test-only",
+        monthly_budget_microusd=6000,
+    )
+    app.dependency_overrides[get_settings] = lambda: settings
+    try:
+        payload = {
+            "items": [
+                {"message": "first task", "use_rag": False},
+                {"message": "second task", "use_rag": False},
+            ]
+        }
+        headers = {"Idempotency-Key": "batch-run-test"}
+        response = client.post("/api/v1/runs/batch", json=payload, headers=headers)
+        assert response.status_code == 207, response.text
+        results = response.json()
+        assert results[0]["run"]["status"] == "queued"
+        assert results[1]["error"] == "Monthly model budget exhausted"
+
+        replay = client.post("/api/v1/runs/batch", json=payload, headers=headers)
+        assert replay.status_code == 207
+        assert replay.json()[0]["run"]["id"] == results[0]["run"]["id"]
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+
+def test_structured_run_output_is_validated_and_persisted(client, session_factory):
+    class StructuredModel:
+        async def astream(self, messages):
+            assert any(
+                "exactly these fields" in str(message.content) for message in messages
+            )
+            yield AIMessageChunk(
+                content='{"answer":"A validated answer","citations":[]}',
+                usage_metadata={
+                    "input_tokens": 20,
+                    "output_tokens": 10,
+                    "total_tokens": 30,
+                },
+            )
+
+    settings = Settings(_env_file=None, chat_enabled=True, openai_api_key="test-only")
+    app.dependency_overrides[get_settings] = lambda: settings
+    try:
+        created = client.post(
+            "/api/v1/runs",
+            json={
+                "message": "Answer with a structured response",
+                "use_rag": False,
+                "structured_output": True,
+            },
+            headers={"Idempotency-Key": "structured-run-test"},
+        )
+        assert created.status_code == 202, created.text
+        run_id = created.json()["id"]
+        assert asyncio.run(
+            process_one(
+                session_factory,
+                InMemorySaver(),
+                settings,
+                lambda _: StructuredModel(),
+            )
+        )
+        result = client.get(f"/api/v1/runs/{run_id}").json()
+        assert result["status"] == "succeeded", result
+        assert result["output"]["text"] == "A validated answer"
+        assert result["output"]["structured"] == {
+            "answer": "A validated answer",
+            "citations": [],
+        }
+        events = client.get(f"/api/v1/runs/{run_id}/events?follow=false").text
+        assert "event: structured_response" in events
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+
+def test_structured_run_rejects_unknown_citation(client, session_factory):
+    class InvalidCitationModel:
+        async def astream(self, messages):
+            yield AIMessageChunk(
+                content=(
+                    '{"answer":"Unsupported source","citations":["other-tenant-doc"]}'
+                ),
+                usage_metadata={
+                    "input_tokens": 20,
+                    "output_tokens": 10,
+                    "total_tokens": 30,
+                },
+            )
+
+    settings = Settings(_env_file=None, chat_enabled=True, openai_api_key="test-only")
+    app.dependency_overrides[get_settings] = lambda: settings
+    try:
+        created = client.post(
+            "/api/v1/runs",
+            json={
+                "message": "Answer with a structured response",
+                "use_rag": False,
+                "structured_output": True,
+            },
+            headers={"Idempotency-Key": "structured-invalid-citation"},
+        )
+        assert created.status_code == 202, created.text
+        run_id = created.json()["id"]
+        assert asyncio.run(
+            process_one(
+                session_factory,
+                InMemorySaver(),
+                settings,
+                lambda _: InvalidCitationModel(),
+            )
+        )
+        result = client.get(f"/api/v1/runs/{run_id}").json()
+        assert result["status"] == "failed"
+        assert result["output"]["text"] == ""
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+
+def test_authenticated_webhook_submission_reuses_run_idempotency(client):
+    settings = Settings(_env_file=None, chat_enabled=True, openai_api_key="test-only")
+    app.dependency_overrides[get_settings] = lambda: settings
+    try:
+        headers = {"Idempotency-Key": "webhook-run-test"}
+        payload = {"message": "Webhook task", "use_rag": False}
+        first = client.post("/api/v1/webhooks/runs", json=payload, headers=headers)
+        replay = client.post("/api/v1/webhooks/runs", json=payload, headers=headers)
+        assert first.status_code == replay.status_code == 202
+        assert first.json()["id"] == replay.json()["id"]
     finally:
         app.dependency_overrides.pop(get_settings, None)
 

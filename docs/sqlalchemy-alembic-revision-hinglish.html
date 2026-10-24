@@ -354,7 +354,8 @@ await session.commit()</code></pre>
 result = await session.execute(statement)
 record = result.scalar_one_or_none()</code></pre>
           <p><code>scalar_one_or_none()</code> ek matching Ticket deta hai ya match na ho to <code>None</code>. Endpoint
-            <code>None</code> par HTTP <code>404</code> return karta hai.</p>
+            <code>None</code> par HTTP <code>404</code> return karta hai.
+          </p>
         </div>
         <div class="lesson">
           <h3>List aur pagination</h3>
@@ -433,8 +434,10 @@ record = result.scalar_one_or_none()</code></pre>
         <span class="tag">06 · Schema ka history</span>
         <h2>Alembic kis kaam aata hai?</h2>
         <p>Model code aaj ka desired table structure batata hai. Alembic migration database ko purane structure se naye
-          structure tak le jaane ke step likhti hai. Jaise migration <a href="../migrations/versions/0001_create_tickets.py">0001</a>
-          tickets table banati hai; <a href="../migrations/versions/0003_ticket_management.py">0003</a> status/version columns aur
+          structure tak le jaane ke step likhti hai. Jaise migration <a
+            href="../migrations/versions/0001_create_tickets.py">0001</a>
+          tickets table banati hai; <a href="../migrations/versions/0003_ticket_management.py">0003</a> status/version
+          columns aur
           index add karti hai.</p>
         <pre><code>revision = "0003"
 down_revision = "0002"
@@ -455,7 +458,8 @@ def downgrade():
           <li><code>downgrade()</code>: schema change reverse karta hai; column drop karna data delete kar sakta hai, so
             production mein soch samajhkar.</li>
         </ul>
-        <p><a href="../migrations/env.py">migrations/env.py</a> models ka <code>Base.metadata</code> Alembic ko deta hai aur settings
+        <p><a href="../migrations/env.py">migrations/env.py</a> models ka <code>Base.metadata</code> Alembic ko deta hai
+          aur settings
           se DB URL padhta hai. Migration history ko edit/delete mat karo; naya change ho to nayi revision banao.</p>
         <div class="note"><strong>Important:</strong> Production API startup har worker mein <code>create_all()</code>
           nahi chalata. Compose ka alag <code>migrate</code> job Alembic ko ek baar chalata hai.</div>

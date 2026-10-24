@@ -1,8 +1,9 @@
 import asyncio
+import hashlib
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
@@ -11,7 +12,13 @@ from backendfastapi.api.deps import get_db_session
 from backendfastapi.core.config import Settings, get_settings
 from backendfastapi.core.identity import Principal, get_principal, require_admin
 from backendfastapi.db.models import AgentRun, LoginSession, RunEvent, User
-from backendfastapi.schemas.platform import Approval, RunCreate, RunResponse
+from backendfastapi.schemas.platform import (
+    Approval,
+    BatchRunCreate,
+    BatchRunResult,
+    RunCreate,
+    RunResponse,
+)
 from backendfastapi.services.runs import (
     TERMINAL,
     approve_run,
@@ -36,6 +43,44 @@ async def submit(
     ],
 ):
     return await submit_run(session, data, actor, idempotency_key, settings)
+
+
+@router.post(
+    "/batch",
+    response_model=list[BatchRunResult],
+    status_code=202,
+    responses={
+        207: {"model": list[BatchRunResult], "description": "Partial acceptance"}
+    },
+)
+async def submit_batch(
+    data: BatchRunCreate,
+    session: Session,
+    actor: Actor,
+    settings: Annotated[Settings, Depends(get_settings)],
+    response: Response,
+    idempotency_key: Annotated[
+        str, Header(min_length=8, max_length=100, pattern=r"^[A-Za-z0-9._:-]+$")
+    ],
+):
+    key_prefix = hashlib.sha256(idempotency_key.encode()).hexdigest()[:48]
+    results = []
+    for index, item in enumerate(data.items):
+        try:
+            run = await submit_run(
+                session,
+                item,
+                actor,
+                f"batch-{key_prefix}-{index}",
+                settings,
+            )
+            results.append(BatchRunResult(index=index, run=run))
+        except HTTPException as exc:
+            await session.rollback()
+            results.append(BatchRunResult(index=index, error=str(exc.detail)))
+    if any(result.error is not None for result in results):
+        response.status_code = 207
+    return results
 
 
 @router.get("", response_model=list[RunResponse])

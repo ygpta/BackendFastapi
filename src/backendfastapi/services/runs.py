@@ -133,7 +133,7 @@ async def submit_run(
         "conversation_version": version,
         "system_prompt": prompt.content if prompt else DEFAULT_PROMPT,
         "prompt_version": prompt.id if prompt else "builtin-v1",
-        "model": settings.openai_model,
+        "model": settings.chat_model,
         "max_input_tokens": settings.agent_max_input_tokens,
         "max_output_tokens": settings.chat_max_output_tokens,
         "input_price": settings.model_input_price_per_million_microusd,

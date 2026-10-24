@@ -8,10 +8,13 @@ import asyncio
 import contextlib
 import signal
 import sys
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from time import perf_counter
 from uuid import UUID, uuid4
 
-from langchain_openai import ChatOpenAI
+import httpx
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from opentelemetry import trace
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
@@ -131,7 +134,16 @@ async def check_lease(session, run):
     return current
 
 
-async def execute_run(factory, run, checkpointer, settings, model_factory=None):
+async def execute_run(
+    factory,
+    run,
+    checkpointer,
+    settings,
+    model_factory=None,
+    embedding_provider=None,
+    ttft_observer: Callable[[float], None] | None = None,
+    retrieval_observer: Callable[[float], None] | None = None,
+):
     """Execute checkpointed graph nodes using short-lived database transactions."""
     progress = {"called": False}
 
@@ -144,9 +156,20 @@ async def execute_run(factory, run, checkpointer, settings, model_factory=None):
             event(session, run, kind, payload)
 
     async def search(query):
+        started = perf_counter()
         async with factory() as session:
             session.info["tenant_id"] = run.tenant_id
-            documents = await retrieve(session, query)
+            documents = await retrieve(
+                session,
+                query,
+                embedding_provider=(
+                    embedding_provider.aembed_query if embedding_provider else None
+                ),
+                embedding_model=settings.openai_embedding_model,
+            )
+            await session.commit()
+            if retrieval_observer is not None:
+                retrieval_observer(perf_counter() - started)
             return [
                 {"id": item.id, "title": item.title, "content": item.content[:2000]}
                 for item in documents
@@ -233,7 +256,15 @@ async def execute_run(factory, run, checkpointer, settings, model_factory=None):
             stream_usage=True,
         )
     )
-    graph = build_run_graph(model, run.input, search, tool, publish, checkpointer)
+    graph = build_run_graph(
+        model,
+        run.input,
+        search,
+        tool,
+        publish,
+        checkpointer,
+        ttft_observer,
+    )
     config = {
         "configurable": {"thread_id": f"{run.tenant_id}:{run.id}"},
         "recursion_limit": 8,
@@ -292,6 +323,8 @@ async def finish_run(factory, run, state, error_code, charged):
             "prompt_version": run.input["prompt_version"],
             "conversation_id": run.input["conversation_id"],
         }
+        if "structured" in state:
+            output["structured"] = state["structured"]
         if not cancelled and error_code is None:
             conversation_id = UUID(run.input["conversation_id"])
             version = run.input["conversation_version"]
@@ -348,7 +381,15 @@ async def finish_run(factory, run, state, error_code, charged):
         audit(session, f"run.{current.status}", run.id)
 
 
-async def process_one(factory, checkpointer, settings, model_factory=None):
+async def process_one(
+    factory,
+    checkpointer,
+    settings,
+    model_factory=None,
+    embedding_provider=None,
+    ttft_observer: Callable[[float], None] | None = None,
+    retrieval_observer: Callable[[float], None] | None = None,
+):
     """Monitor execution for cancellation while renewing the worker's lease."""
     run = await claim_run(factory, settings)
     if run is None:
@@ -364,7 +405,16 @@ async def process_one(factory, checkpointer, settings, model_factory=None):
             record_exception=False,
             set_status_on_exception=False,
         ):
-            await execute_run(factory, run, checkpointer, settings, model_factory)
+            await execute_run(
+                factory,
+                run,
+                checkpointer,
+                settings,
+                model_factory,
+                embedding_provider,
+                ttft_observer,
+                retrieval_observer,
+            )
 
     task = asyncio.create_task(traced_execution())
     try:
@@ -416,9 +466,43 @@ async def main(setup=False):
     for name in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(name, stop.set)
     try:
-        async with AsyncPostgresSaver.from_conn_string(
-            checkpoint_url(settings)
-        ) as saver:
+        async with contextlib.AsyncExitStack() as resources:
+            embedding_client = None
+            http_client = None
+            if not setup and (settings.openai_api_key or settings.chat_enabled):
+                http_client = await resources.enter_async_context(
+                    httpx.AsyncClient(
+                        timeout=settings.chat_timeout_seconds,
+                        limits=httpx.Limits(
+                            max_connections=settings.worker_concurrency,
+                            max_keepalive_connections=settings.worker_concurrency,
+                        ),
+                    )
+                )
+                if settings.openai_api_key:
+                    embedding_client = OpenAIEmbeddings(
+                        api_key=settings.openai_api_key,
+                        model=settings.openai_embedding_model,
+                        dimensions=1536,
+                        http_async_client=http_client,
+                    )
+            model = None
+            if not setup and settings.chat_enabled:
+                if http_client is None:
+                    raise ValueError("Chat requires an initialized HTTP client")
+                model = ChatOpenAI(
+                    api_key=settings.chat_api_key,
+                    base_url=settings.chat_base_url,
+                    model=settings.chat_model,
+                    max_retries=0,
+                    timeout=settings.chat_timeout_seconds,
+                    max_tokens=settings.chat_max_output_tokens,
+                    stream_usage=True,
+                    http_async_client=http_client,
+                )
+            saver = await resources.enter_async_context(
+                AsyncPostgresSaver.from_conn_string(checkpoint_url(settings))
+            )
             if setup:
                 await saver.setup()
                 return
@@ -427,16 +511,43 @@ async def main(setup=False):
             duration = Histogram(
                 "worker_run_duration_seconds", "Durable run execution duration"
             )
-            while not stop.is_set():
-                with duration.time():
-                    processed = await process_one(SessionFactory, saver, settings)
-                if processed:
-                    completed.inc()
-                else:
-                    with contextlib.suppress(TimeoutError):
-                        await asyncio.wait_for(
-                            stop.wait(), timeout=settings.worker_poll_seconds
+
+            time_to_first_token = Histogram(
+                "agent_time_to_first_token_seconds",
+                "Time from generation start to the first streamed token",
+                buckets=(0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60),
+            )
+            retrieval_duration = Histogram(
+                "agent_retrieval_duration_seconds",
+                "Semantic or lexical retrieval duration",
+                buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10),
+            )
+
+            async def worker_loop():
+                while not stop.is_set():
+                    with duration.time():
+                        processed = await process_one(
+                            SessionFactory,
+                            saver,
+                            settings,
+                            model_factory=(lambda _: model) if model else None,
+                            embedding_provider=embedding_client,
+                            ttft_observer=time_to_first_token.observe,
+                            retrieval_observer=retrieval_duration.observe,
                         )
+                    if processed:
+                        completed.inc()
+                    else:
+                        with contextlib.suppress(TimeoutError):
+                            await asyncio.wait_for(
+                                stop.wait(), timeout=settings.worker_poll_seconds
+                            )
+
+            tasks = [
+                asyncio.create_task(worker_loop())
+                for _ in range(settings.worker_concurrency)
+            ]
+            await asyncio.gather(*tasks)
     finally:
         if provider:
             await asyncio.to_thread(provider.shutdown)

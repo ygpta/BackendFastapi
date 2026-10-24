@@ -66,6 +66,15 @@ API_KEY=<random-service-key-at-least-32-characters>
 Generate a key locally with `openssl rand -hex 32`. Do not send secrets through
 chat or commit them. Recreate the API with `docker compose up -d api`.
 
+OpenAI is the default chat provider. To use xAI/Grok, configure
+`LLM_PROVIDER=xai`, `LLM_API_KEY`, and `LLM_MODEL` (for example, a Grok model enabled
+for your account). For Ollama, set `LLM_PROVIDER=ollama`, `LLM_MODEL` to a model
+already pulled on the Ollama server, and optionally `LLM_BASE_URL` to the server's
+OpenAI-compatible `/v1` endpoint. From Docker, `localhost` means the application
+container; use a reachable host or Compose service address instead. OpenAI
+embeddings remain a separate setting for semantic retrieval: configure
+`OPENAI_API_KEY` and `OPENAI_EMBEDDING_MODEL`, or retrieval uses lexical search.
+
 ```bash
 curl -X POST http://127.0.0.1:8000/api/v1/chat \
   -H "X-API-Key: $API_KEY" -H 'Content-Type: application/json' \
@@ -97,10 +106,13 @@ system prompt and bounded recent history. It does not run tools or background jo
 | `DELETE /api/v1/chat/{id}` | Delete conversation and messages |
 | `POST /api/v1/auth/login` | Tenant user login |
 | `POST /api/v1/runs` | Idempotent, quota-reserved agent job |
+| `POST /api/v1/runs/batch` | Enqueue up to 10 durable jobs per request |
+| `POST /api/v1/webhooks/runs` | JWT-authenticated webhook-compatible run submission |
 | `GET /api/v1/runs/{id}/events` | Replayable SSE token/state events |
 | `POST /api/v1/runs/{id}/cancel` | Cancel a durable run |
 | `POST /api/v1/runs/{id}/approval` | Separate-admin approval |
-| `GET /api/v1/knowledge/search` | Tenant-scoped full-text retrieval |
+| `GET /api/v1/knowledge/search` | Tenant-scoped hybrid semantic and lexical search |
+| `POST /api/v1/knowledge/documents/{id}/embed` | Admin re-embeds an existing document |
 | `GET /api/v1/usage` | Monthly spending/reservations |
 | `GET /api/v1/audit` | Administrator audit records |
 

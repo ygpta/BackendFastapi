@@ -2,6 +2,7 @@
 
 from datetime import datetime
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON,
     BigInteger,
@@ -53,14 +54,33 @@ class Document(TenantScoped, Base):
             func.to_tsvector(literal_column("'english'::regconfig"), text("content")),
             postgresql_using="gin",
         ).ddl_if(dialect="postgresql"),
+        Index(
+            "ix_documents_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ).ddl_if(dialect="postgresql"),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     title: Mapped[str] = mapped_column(String(200))
     content: Mapped[str] = mapped_column(Text)
+    embedding: Mapped[list[float] | None] = mapped_column(
+        Vector(1536).with_variant(JSON(), "sqlite"), nullable=True
+    )
+    embedding_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class EmbeddingCache(TenantScoped, Base):
+    __tablename__ = "embedding_cache"
+    __table_args__ = (Index("ix_embedding_cache_expires_at", "expires_at"),)
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    embedding: Mapped[list[float]] = mapped_column(JSON)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class ToolGrant(TenantScoped, Base):

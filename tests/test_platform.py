@@ -4,9 +4,41 @@ from langchain_core.messages import AIMessageChunk
 from langgraph.checkpoint.memory import InMemorySaver
 
 from backendfastapi.core.config import Settings, get_settings
+from backendfastapi.db.models import Document
 from backendfastapi.main import app
 from backendfastapi.worker import process_one
 from tests.helpers import headers, register
+
+
+def test_existing_document_can_be_embedded_by_admin(client, session_factory):
+    class Embedder:
+        async def aembed_query(self, text):
+            assert text == "legacy document content"
+            return [0.25] * 1536
+
+    original = app.state.embedding_client
+    app.state.embedding_client = Embedder()
+    try:
+        created = client.post(
+            "/api/v1/knowledge/documents",
+            json={"title": "Legacy", "content": "legacy document content"},
+        )
+        response = client.post(
+            f"/api/v1/knowledge/documents/{created.json()['id']}/embed"
+        )
+        assert response.status_code == 200, response.text
+
+        async def load_embedding():
+            async with session_factory() as session:
+                document = await session.get(Document, created.json()["id"])
+                return document.embedding, document.embedding_model
+
+        assert asyncio.run(load_embedding()) == (
+            [0.25] * 1536,
+            "text-embedding-3-small",
+        )
+    finally:
+        app.state.embedding_client = original
 
 
 def test_knowledge_prompts_feedback_and_evaluation(client, session_factory):
@@ -50,9 +82,17 @@ def test_knowledge_prompts_feedback_and_evaluation(client, session_factory):
         )
         assert run.status_code == 202, run.text
         run_id = run.json()["id"]
+        retrieval_times = []
         asyncio.run(
-            process_one(session_factory, InMemorySaver(), settings, lambda _: Model())
+            process_one(
+                session_factory,
+                InMemorySaver(),
+                settings,
+                lambda _: Model(),
+                retrieval_observer=retrieval_times.append,
+            )
         )
+        assert len(retrieval_times) == 1 and retrieval_times[0] >= 0
         result = client.get(f"/api/v1/runs/{run_id}").json()
         assert result["status"] == "succeeded", result
         assert result["output"]["citations"][0]["id"] == document.json()["id"]
