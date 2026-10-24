@@ -19,6 +19,7 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_MODEL: ${LLM_MODEL:-}
+      PROVIDER_MAX_CONCURRENCY: ${PROVIDER_MAX_CONCURRENCY:-8}
 
   api:
     environment:
@@ -33,6 +34,7 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_MODEL: ${LLM_MODEL:-}
+      PROVIDER_MAX_CONCURRENCY: ${PROVIDER_MAX_CONCURRENCY:-8}
 
   checkpoint-setup:
     environment:
@@ -47,6 +49,7 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_MODEL: ${LLM_MODEL:-}
+      PROVIDER_MAX_CONCURRENCY: ${PROVIDER_MAX_CONCURRENCY:-8}
 
   worker:
     environment:
@@ -61,3 +64,4 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_MODEL: ${LLM_MODEL:-}
+      PROVIDER_MAX_CONCURRENCY: ${PROVIDER_MAX_CONCURRENCY:-8}

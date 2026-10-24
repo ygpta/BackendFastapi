@@ -6,6 +6,9 @@ Existing ticket endpoints and learning material are retained.
 
 **Learning this codebase?** Start with [the hands-on learning path](docs/learning-path.md).
 It maps the current code to tests, debugging steps, exercises and questions to answer.
+For architecture diagrams, a technical glossary, and an in-depth source walkthrough
+with bullet-point Hinglish explanations, open the
+[combined visual map and code guide](docs/app-map-hinglish.html).
 Search for `Learn:` in the source to find the study notes at important boundaries.
 For a quick Hinglish Pydantic refresher, open the
 [Pydantic revision sheet](docs/pydantic-revision-hinglish.html).

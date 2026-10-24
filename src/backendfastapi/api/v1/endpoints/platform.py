@@ -31,7 +31,12 @@ from backendfastapi.schemas.platform import (
     PromptResponse,
 )
 from backendfastapi.services.controls import insert_for
-from backendfastapi.services.knowledge import retrieve
+from backendfastapi.services.knowledge import (
+    embed_document as persist_document_embeddings,
+)
+from backendfastapi.services.knowledge import (
+    retrieve,
+)
 from backendfastapi.services.runs import get_run
 
 router = APIRouter(tags=["agent platform"])
@@ -48,16 +53,17 @@ async def add_document(
     settings: Annotated[Settings, Depends(get_settings)],
 ):
     embedding_client = getattr(request.app.state, "embedding_client", None)
-    embedding = (
-        await embedding_client.aembed_query(data.content) if embedding_client else None
-    )
-    record = Document(
-        id=uuid4().hex,
-        embedding=embedding,
-        embedding_model=settings.openai_embedding_model if embedding else None,
-        **data.model_dump(),
-    )
+    record = Document(id=uuid4().hex, **data.model_dump())
     session.add(record)
+    await session.flush()
+    if embedding_client is not None:
+        await persist_document_embeddings(
+            session,
+            record,
+            embedding_client,
+            settings.openai_embedding_model,
+            getattr(request.app.state, "provider_semaphore", None),
+        )
     audit(session, "document.created", record.id)
     await session.commit()
     return record
@@ -89,6 +95,7 @@ async def search_documents(
         limit,
         embedding_client.aembed_query if embedding_client else None,
         settings.openai_embedding_model,
+        getattr(request.app.state, "provider_semaphore", None),
     )
     await session.commit()
     return results
@@ -122,8 +129,13 @@ async def embed_document(
     document = await session.get(Document, document_id)
     if document is None:
         raise HTTPException(404, "Document not found")
-    document.embedding = await embedding_client.aembed_query(document.content)
-    document.embedding_model = settings.openai_embedding_model
+    await persist_document_embeddings(
+        session,
+        document,
+        embedding_client,
+        settings.openai_embedding_model,
+        getattr(request.app.state, "provider_semaphore", None),
+    )
     audit(session, "document.embedded", document.id)
     await session.commit()
     return document

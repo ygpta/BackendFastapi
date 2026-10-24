@@ -2,19 +2,29 @@ import asyncio
 
 from langchain_core.messages import AIMessageChunk
 from langgraph.checkpoint.memory import InMemorySaver
+from sqlalchemy import select
 
 from backendfastapi.core.config import Settings, get_settings
-from backendfastapi.db.models import Document
+from backendfastapi.db.models import Document, DocumentChunk
 from backendfastapi.main import app
+from backendfastapi.services.knowledge import split_document
 from backendfastapi.worker import process_one
 from tests.helpers import headers, register
 
 
+def test_document_chunks_have_bounded_size_and_overlap():
+    chunks = split_document("x" * 2850)
+
+    assert [len(chunk) for chunk in chunks] == [1200, 1200, 750]
+    assert chunks[0][-150:] == chunks[1][:150]
+    assert chunks[1][-150:] == chunks[2][:150]
+
+
 def test_existing_document_can_be_embedded_by_admin(client, session_factory):
     class Embedder:
-        async def aembed_query(self, text):
-            assert text == "legacy document content"
-            return [0.25] * 1536
+        async def aembed_documents(self, texts):
+            assert texts == ["legacy document content"]
+            return [[0.25] * 1536]
 
     original = app.state.embedding_client
     app.state.embedding_client = Embedder()
@@ -31,12 +41,22 @@ def test_existing_document_can_be_embedded_by_admin(client, session_factory):
         async def load_embedding():
             async with session_factory() as session:
                 document = await session.get(Document, created.json()["id"])
-                return document.embedding, document.embedding_model
+                chunks = await session.scalars(
+                    select(DocumentChunk).where(
+                        DocumentChunk.document_id == document.id
+                    )
+                )
+                return (
+                    document.embedding,
+                    document.embedding_model,
+                    list(chunks),
+                )
 
-        assert asyncio.run(load_embedding()) == (
-            [0.25] * 1536,
-            "text-embedding-3-small",
-        )
+        embedding, model, chunks = asyncio.run(load_embedding())
+        assert embedding == [0.25] * 1536
+        assert model == "text-embedding-3-small"
+        assert len(chunks) == 1
+        assert chunks[0].content == "legacy document content"
     finally:
         app.state.embedding_client = original
 

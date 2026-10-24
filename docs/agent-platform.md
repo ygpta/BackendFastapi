@@ -151,7 +151,8 @@ The cap is per tenant, not a global provider-project budget.
 
 Embedding-provider calls for document ingestion and semantic queries are separate
 from durable run generation and are not included in the tenant run-budget ledger.
-Configure provider-side spending limits/alerts and control document ingestion access.
+Provider calls share the process-local `PROVIDER_MAX_CONCURRENCY` semaphore; configure
+provider-side spending limits/alerts and control document ingestion access.
 
 ## Tools and Approval
 
@@ -174,12 +175,13 @@ sandbox/egress protocols before being added.
 ## Retrieval and Quality
 
 - `/knowledge/documents`: create/list; delete by ID. When an embedding provider is
-  configured, new documents receive a 1536-dimensional embedding. `/knowledge/search`
-  and runs combine tenant-scoped pgvector cosine and PostgreSQL full-text candidate
-  rankings with reciprocal-rank fusion; without an embedding provider, retrieval is
-  lexical only. Query embeddings are cached per
-  tenant/model/query for seven days. Existing documents keep null embeddings after the
-  migration; admins can use `POST /knowledge/documents/{id}/embed` to embed them after
+  configured, new documents are split into overlapping 1200-character chunks and
+  embedded (1536 dimensions). `/knowledge/search` and runs combine tenant-scoped
+  pgvector cosine and PostgreSQL full-text chunk rankings with reciprocal-rank
+  fusion, returning the best matching chunk for each document. Legacy documents
+  without chunks remain available through lexical search. Query embeddings are cached
+  per tenant/model/query for seven days. Admins can use
+  `POST /knowledge/documents/{id}/embed` to refresh chunks and embeddings after
   configuring the provider. Stored model IDs prevent comparisons across different
   embedding models. SQLite tests retain lexical search only.
 - `/prompts`: admin creates immutable version IDs. POST `/prompts/{id}/activate`
@@ -195,7 +197,7 @@ Treat documents and generated text as untrusted; sanitize Markdown/links in clie
 Source deletion prevents future retrieval but does not erase historical messages,
 run snapshots or checkpoints. Implement retention/erasure across those stores before
 processing regulated data. Document ingestion embeds the supplied bounded text;
-there is no file parser, chunking pipeline, reranker, or semantic-quality guarantee.
+there is no file parser or reranker, and retrieval has no semantic-quality guarantee.
 The generic webhook accepts the same validated run request as the API and requires
 the caller's JWT and `Idempotency-Key`; provider-specific signature verification is
 not included.
@@ -203,6 +205,8 @@ not included.
 `POST /api/v1/runs/batch` accepts at most 10 jobs and creates separately budgeted,
 idempotent durable runs. Per-item failures are returned with HTTP 207; accepted runs
 remain queued. `WORKER_CONCURRENCY` bounds concurrent worker executions (default 4).
+`PROVIDER_MAX_CONCURRENCY` limits simultaneous chat and embedding-provider calls per
+process (default 8); it is not a distributed quota across replicas.
 Worker Prometheus metrics include `agent_time_to_first_token_seconds` and
 `agent_retrieval_duration_seconds`. The cache stores embeddings only, not generated
 answers, so budget accounting and conversation state are not bypassed.

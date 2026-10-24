@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     worker_poll_seconds: float = Field(default=1, ge=0.1, le=30)
     worker_max_attempts: int = Field(default=3, ge=1, le=5)
     worker_concurrency: int = Field(default=4, ge=1, le=16)
+    provider_max_concurrency: int = Field(default=8, ge=1, le=64)
     otel_enabled: bool = False
     otel_endpoint: str = "http://otel-collector:4318/v1/traces"
     allowed_hosts: list[str] = ["localhost", "127.0.0.1", "testserver"]

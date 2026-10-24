@@ -35,7 +35,7 @@ without approval.
 | `API_KEY` | Optional locally; production minimum 32 characters |
 | `ALLOWED_HOSTS` | JSON array; production Compose requires an explicit value |
 | `CORS_ORIGINS` | JSON array; defaults to no cross-origin browser access |
-| `CHAT_ENABLED` | `false`; enabling requires `OPENAI_API_KEY` |
+| `CHAT_ENABLED` | `false`; enabling requires credentials for the selected chat provider |
 | `OPENAI_MODEL` | `gpt-4.1-mini`; choose an approved accessible chat model |
 | `LLM_PROVIDER` | `openai`; alternatively `xai` or `ollama` |
 | `LLM_API_KEY` | Required for xAI/Grok; Ollama does not require a provider key |
@@ -49,6 +49,7 @@ without approval.
 | `DATABASE_TIMEOUT_SECONDS` | `10`; pool, connection, command/statement timeout |
 | `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small`; semantic retrieval uses 1536 dimensions |
 | `WORKER_CONCURRENCY` | `4`; maximum simultaneous durable runs per worker process |
+| `PROVIDER_MAX_CONCURRENCY` | `8`; simultaneous chat/embedding calls per process |
 | `LOG_LEVEL` | `INFO`; JSON application/access events |
 | `MAX_REQUEST_BODY_BYTES` | `32768`; allowed range 1 KiB-10 MiB |
 
@@ -157,7 +158,9 @@ deadline. Set model spending alerts. Uvicorn concurrency limits are not a rate
 limiter. The image ignores forwarded headers; enable them only with explicitly
 trusted proxy IPs in your deployment command.
 
-The worker runs up to `WORKER_CONCURRENCY` jobs concurrently. Scale replicas and
+The worker runs up to `WORKER_CONCURRENCY` jobs concurrently. The process-local
+`PROVIDER_MAX_CONCURRENCY` semaphore separately caps simultaneous chat and embedding
+requests; it does not enforce a fleet-wide provider quota. Scale replicas and
 budget DB connections as
 `replicas * workers * (pool_size + max_overflow)`, plus migration/admin connections.
 Tune concurrency and memory under realistic load. SIGTERM permits 40 seconds for

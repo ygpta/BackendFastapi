@@ -143,6 +143,7 @@ async def execute_run(
     embedding_provider=None,
     ttft_observer: Callable[[float], None] | None = None,
     retrieval_observer: Callable[[float], None] | None = None,
+    provider_semaphore: asyncio.Semaphore | None = None,
 ):
     """Execute checkpointed graph nodes using short-lived database transactions."""
     progress = {"called": False}
@@ -166,6 +167,7 @@ async def execute_run(
                     embedding_provider.aembed_query if embedding_provider else None
                 ),
                 embedding_model=settings.openai_embedding_model,
+                provider_semaphore=provider_semaphore,
             )
             await session.commit()
             if retrieval_observer is not None:
@@ -264,6 +266,7 @@ async def execute_run(
         publish,
         checkpointer,
         ttft_observer,
+        provider_semaphore,
     )
     config = {
         "configurable": {"thread_id": f"{run.tenant_id}:{run.id}"},
@@ -389,6 +392,7 @@ async def process_one(
     embedding_provider=None,
     ttft_observer: Callable[[float], None] | None = None,
     retrieval_observer: Callable[[float], None] | None = None,
+    provider_semaphore: asyncio.Semaphore | None = None,
 ):
     """Monitor execution for cancellation while renewing the worker's lease."""
     run = await claim_run(factory, settings)
@@ -414,6 +418,7 @@ async def process_one(
                 embedding_provider,
                 ttft_observer,
                 retrieval_observer,
+                provider_semaphore,
             )
 
     task = asyncio.create_task(traced_execution())
@@ -522,6 +527,7 @@ async def main(setup=False):
                 "Semantic or lexical retrieval duration",
                 buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10),
             )
+            provider_semaphore = asyncio.Semaphore(settings.provider_max_concurrency)
 
             async def worker_loop():
                 while not stop.is_set():
@@ -534,6 +540,7 @@ async def main(setup=False):
                             embedding_provider=embedding_client,
                             ttft_observer=time_to_first_token.observe,
                             retrieval_observer=retrieval_duration.observe,
+                            provider_semaphore=provider_semaphore,
                         )
                     if processed:
                         completed.inc()

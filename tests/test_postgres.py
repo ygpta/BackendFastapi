@@ -21,6 +21,7 @@ from backendfastapi.db.models import (
     ChatMessage,
     Conversation,
     Document,
+    DocumentChunk,
     EmbeddingCache,
     PromptVersion,
     Ticket,
@@ -108,8 +109,6 @@ def test_postgres_migrations_and_concurrent_writers():
                         tenant_id="semantic-test",
                         title="Semantic document",
                         content="a distinct lexical phrase",
-                        embedding=[1.0] + [0.0] * 1535,
-                        embedding_model="text-embedding-3-small",
                     ),
                     Document(
                         id="lexical-fusion-document",
@@ -117,6 +116,17 @@ def test_postgres_migrations_and_concurrent_writers():
                         title="Lexical document",
                         content="semantic query lexical match",
                     ),
+                )
+                session.add(
+                    DocumentChunk(
+                        id="semantic-fusion-chunk",
+                        tenant_id="semantic-test",
+                        document_id="semantic-fusion-document",
+                        chunk_index=0,
+                        content="a distinct lexical phrase",
+                        embedding=[1.0] + [0.0] * 1535,
+                        embedding_model="text-embedding-3-small",
+                    )
                 )
                 await session.commit()
                 found = await retrieve(

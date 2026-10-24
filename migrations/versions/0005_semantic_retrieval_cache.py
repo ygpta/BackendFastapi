@@ -56,9 +56,63 @@ def upgrade() -> None:
         ["tenant_id"],
         unique=False,
     )
+    op.create_table(
+        "document_chunks",
+        sa.Column("id", sa.String(length=64), nullable=False),
+        sa.Column("document_id", sa.String(length=64), nullable=False),
+        sa.Column("chunk_index", sa.Integer(), nullable=False),
+        sa.Column("content", sa.Text(), nullable=False),
+        sa.Column("embedding", Vector(1536), nullable=True),
+        sa.Column("embedding_model", sa.String(length=120), nullable=True),
+        sa.Column(
+            "tenant_id",
+            sa.String(length=64),
+            server_default="development",
+            nullable=False,
+        ),
+        sa.ForeignKeyConstraint(
+            ["document_id"], ["documents.id"], ondelete="CASCADE"
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint(
+            "document_id", "chunk_index", name="uq_document_chunk_order"
+        ),
+    )
+    op.create_index(
+        "ix_document_chunks_document_id",
+        "document_chunks",
+        ["document_id"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_document_chunks_tenant_id"),
+        "document_chunks",
+        ["tenant_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_document_chunks_embedding_hnsw",
+        "document_chunks",
+        ["embedding"],
+        postgresql_using="hnsw",
+        postgresql_ops={"embedding": "vector_cosine_ops"},
+    )
+    op.create_index(
+        "ix_document_chunks_search",
+        "document_chunks",
+        [sa.text("to_tsvector('english'::regconfig, content)")],
+        postgresql_using="gin",
+    )
 
 
 def downgrade() -> None:
+    op.drop_index("ix_document_chunks_search", table_name="document_chunks")
+    op.drop_index(
+        "ix_document_chunks_embedding_hnsw", table_name="document_chunks"
+    )
+    op.drop_index(op.f("ix_document_chunks_tenant_id"), table_name="document_chunks")
+    op.drop_index("ix_document_chunks_document_id", table_name="document_chunks")
+    op.drop_table("document_chunks")
     op.drop_index("ix_documents_embedding_hnsw", table_name="documents")
     op.drop_index(op.f("ix_embedding_cache_tenant_id"), table_name="embedding_cache")
     op.drop_index(op.f("ix_embedding_cache_expires_at"), table_name="embedding_cache")

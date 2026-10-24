@@ -1,5 +1,6 @@
 """Learning entry point: construct the app, trace a request, then follow its service."""
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
@@ -31,6 +32,9 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     configure_logging(settings.log_level)
     application.state.chat_workflow = None
     application.state.embedding_client = None
+    application.state.provider_semaphore = asyncio.Semaphore(
+        settings.provider_max_concurrency
+    )
     async with AsyncExitStack() as resources:
         # Registered cleanup runs even if startup or a later resource fails.
         resources.push_async_callback(engine.dispose)
@@ -73,7 +77,9 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
                 http_async_client=http_client,
             )
             application.state.chat_workflow = build_chat_workflow(
-                model, metrics=application.state.agent_metrics
+                model,
+                metrics=application.state.agent_metrics,
+                provider_semaphore=application.state.provider_semaphore,
             )
         try:
             yield

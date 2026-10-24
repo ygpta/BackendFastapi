@@ -74,6 +74,35 @@ class Document(TenantScoped, Base):
     )
 
 
+class DocumentChunk(TenantScoped, Base):
+    __tablename__ = "document_chunks"
+    __table_args__ = (
+        UniqueConstraint("document_id", "chunk_index", name="uq_document_chunk_order"),
+        Index(
+            "ix_document_chunks_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ).ddl_if(dialect="postgresql"),
+        Index(
+            "ix_document_chunks_search",
+            func.to_tsvector(literal_column("'english'::regconfig"), text("content")),
+            postgresql_using="gin",
+        ).ddl_if(dialect="postgresql"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+    chunk_index: Mapped[int]
+    content: Mapped[str] = mapped_column(Text)
+    embedding: Mapped[list[float] | None] = mapped_column(
+        Vector(1536).with_variant(JSON(), "sqlite"), nullable=True
+    )
+    embedding_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+
 class EmbeddingCache(TenantScoped, Base):
     __tablename__ = "embedding_cache"
     __table_args__ = (Index("ix_embedding_cache_expires_at", "expires_at"),)

@@ -4,6 +4,7 @@ Read this before worker.py. Tests inject fake models and an in-memory checkpoint
 production injects the provider client and PostgreSQL checkpointer.
 """
 
+import asyncio
 from collections.abc import Callable
 from time import perf_counter
 from typing import TypedDict
@@ -33,6 +34,7 @@ def build_run_graph(
     publish,
     checkpointer,
     ttft_observer: Callable[[float], None] | None = None,
+    provider_semaphore: asyncio.Semaphore | None = None,
 ):
     """Checkpoint each completed node; all tool arguments come from reviewed input."""
 
@@ -82,21 +84,28 @@ def build_run_graph(
         pending = ""
         generation_started = perf_counter()
         first_token_seen = False
-        async for chunk in model.astream(messages):
-            combined = chunk if combined is None else combined + chunk
-            if isinstance(chunk.content, str):
-                if chunk.content and not first_token_seen:
-                    first_token_seen = True
-                    elapsed = perf_counter() - generation_started
-                    if ttft_observer is not None:
-                        ttft_observer(elapsed)
-                    await publish(
-                        "first_token", {"elapsed_ms": round(elapsed * 1000, 2)}
-                    )
-                pending += chunk.content
-            if len(pending) >= 64:
-                await publish("token", {"text": pending})
-                pending = ""
+        if provider_semaphore is not None:
+            await provider_semaphore.acquire()
+        try:
+            stream = model.astream(messages)
+            async for chunk in stream:
+                combined = chunk if combined is None else combined + chunk
+                if isinstance(chunk.content, str):
+                    if chunk.content and not first_token_seen:
+                        first_token_seen = True
+                        elapsed = perf_counter() - generation_started
+                        if ttft_observer is not None:
+                            ttft_observer(elapsed)
+                        await publish(
+                            "first_token", {"elapsed_ms": round(elapsed * 1000, 2)}
+                        )
+                    pending += chunk.content
+                if len(pending) >= 64:
+                    await publish("token", {"text": pending})
+                    pending = ""
+        finally:
+            if provider_semaphore is not None:
+                provider_semaphore.release()
         if pending:
             await publish("token", {"text": pending})
         if (
