@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: backendfastapi_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d backendfastapi_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql+asyncpg://app:ci-only-password@localhost:5432/backendfastapi_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.22"
+          enable-cache: true
+      - run: uv python install 3.13
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check src tests
+      - run: uv run pytest --cov=backendfastapi --cov-report=term-missing --cov-fail-under=80
+      - run: uv run pip-audit --local
+      - run: docker build -t backendfastapi:ci .

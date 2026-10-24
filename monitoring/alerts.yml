@@ -1,0 +1,23 @@
+groups:
+  - name: backendfastapi
+    rules:
+      - alert: APIDown
+        expr: up{job="api"} == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations: {summary: "API metrics target is unavailable"}
+      - alert: HighAPIErrorRate
+        expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(http_requests_total[5m])), 0.001) > 0.05
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: "API error ratio exceeds five percent"}
+      - alert: SlowAPI
+        expr: histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m]))) > 2
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: "API p95 latency exceeds two seconds"}
+      - alert: AgentWorkerDown
+        expr: up{job="worker"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations: {summary: "Agent worker metrics target is unavailable"}

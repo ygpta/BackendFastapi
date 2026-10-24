@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="hi-Latn">
+
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Pydantic v2 ke Hinglish revision notes aur FastAPI project ke examples.">
+    <title>Pydantic Revision | Hinglish Notes</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #172b34;
+        --muted: #52656b;
+        --paper: #f3f7f5;
+        --surface: #ffffff;
+        --line: #d5e2dc;
+        --green: #176b55;
+        --green-soft: #e3f2eb;
+        --orange: #a84c24;
+        --orange-soft: #fff0e6;
+        --code: #10242b;
+        --code-ink: #e8f3ef;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: var(--paper);
+        font-family: Georgia, "Times New Roman", serif;
+        line-height: 1.65;
+      }
+
+      a {
+        color: var(--green);
+        text-underline-offset: 3px;
+      }
+
+      .masthead {
+        border-bottom: 1px solid var(--line);
+        background: var(--surface);
+      }
+
+      .masthead-inner,
+      main,
+      footer {
+        width: min(100% - 36px, 920px);
+        margin-inline: auto;
+      }
+
+      .masthead-inner {
+        padding: 22px 0 18px;
+      }
+
+      .eyebrow,
+      .tag {
+        color: var(--green);
+        font-family: Arial, sans-serif;
+        font-size: .78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3 {
+        line-height: 1.2;
+      }
+
+      h1 {
+        max-width: 750px;
+        margin: 8px 0;
+        font-size: clamp(2.1rem, 7vw, 4.1rem);
+      }
+
+      h2 {
+        margin: 0 0 12px;
+        font-size: 1.8rem;
+      }
+
+      h3 {
+        margin: 0 0 8px;
+        font-size: 1.2rem;
+      }
+
+      p {
+        margin: 8px 0 14px;
+      }
+
+      .lede {
+        max-width: 700px;
+        color: var(--muted);
+        font-size: 1.1rem;
+      }
+
+      main {
+        padding: 24px 0 60px;
+      }
+
+      .toc {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 18px;
+        padding: 14px 18px;
+        margin: 8px 0 28px;
+        border-left: 4px solid var(--green);
+        background: var(--green-soft);
+        font-family: Arial, sans-serif;
+        font-size: .92rem;
+      }
+
+      section {
+        margin: 0 0 38px;
+        scroll-margin-top: 16px;
+      }
+
+      .lesson {
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--surface);
+      }
+
+      .lesson+.lesson {
+        margin-top: 14px;
+      }
+
+      .note {
+        padding: 12px 15px;
+        border-left: 4px solid var(--orange);
+        background: var(--orange-soft);
+      }
+
+      .good {
+        padding: 12px 15px;
+        border-left: 4px solid var(--green);
+        background: var(--green-soft);
+      }
+
+      code,
+      pre {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      }
+
+      :not(pre)>code {
+        padding: 1px 5px;
+        border-radius: 3px;
+        background: #edf2ef;
+        font-size: .9em;
+      }
+
+      pre {
+        overflow-x: auto;
+        padding: 17px;
+        border-radius: 5px;
+        color: var(--code-ink);
+        background: var(--code);
+        font-size: .88rem;
+        line-height: 1.55;
+        tab-size: 4;
+      }
+
+      ul,
+      ol {
+        padding-left: 1.3rem;
+      }
+
+      li {
+        margin: 5px 0;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--surface);
+      }
+
+      th,
+      td {
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: var(--green-soft);
+      }
+
+      .back {
+        font-family: Arial, sans-serif;
+        font-size: .92rem;
+      }
+
+      footer {
+        padding: 0 0 32px;
+        color: var(--muted);
+        font-family: Arial, sans-serif;
+        font-size: .9rem;
+      }
+
+      @media (max-width: 600px) {
+
+        .masthead-inner,
+        main,
+        footer {
+          width: min(100% - 24px, 920px);
+        }
+
+        .lesson {
+          padding: 16px;
+        }
+
+        th,
+        td {
+          padding: 8px;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <header class="masthead">
+      <div class="masthead-inner">
+        <div class="eyebrow">BackendFastapi · Jaldi Revision</div>
+        <h1>Pydantic, Hinglish mein</h1>
+        <p class="lede">Is page mein Pydantic se input check karna, Python models banana, aur data ko dictionary/JSON
+          mein badalna seekhenge. Examples Pydantic v2 aur is project ke ticket schemas se liye gaye hain.</p>
+      </div>
+    </header>
+
+    <main>
+      <nav class="toc" aria-label="Is page ke topics">
+        <a href="#basics">Shuruaat</a>
+        <a href="#fields">Field ke rules</a>
+        <a href="#config">model_config</a>
+        <a href="#validators">Validators</a>
+        <a href="#nested">Nested model</a>
+        <a href="#inheritance">Inheritance</a>
+        <a href="#conversion">Data conversion</a>
+        <a href="#practice">Abhyas</a>
+      </nav>
+
+      <section id="basics">
+        <span class="tag">01 · Shuruaat</span>
+        <h2>Pydantic ka kaam kya hai?</h2>
+        <p>Pydantic Python ke type hints ko program chalte waqt use karke input ko padhta aur check karta hai. FastAPI
+          request ka JSON Pydantic model ko deta hai. Data theek ho to endpoint ko Python object milta hai; data galat
+          ho to aam taur par HTTP <code>422</code> response aata hai.</p>
+        <pre><code>from pydantic import BaseModel
+
+class TicketInput(BaseModel):
+    subject: str
+    message: str
+
+ticket = TicketInput.model_validate({
+    "subject": "Login issue",
+    "message": "I cannot log in today.",
+})
+
+print(ticket.subject)  # Login issue</code></pre>
+        <p>Project mein iska example <a href="../src/backendfastapi/schemas/tickets.py">ticket schema</a> mein aur iska
+          behavior <a href="../tests/test_main.py">preview tests</a> mein dekho.</p>
+      </section>
+
+      <section id="fields">
+        <span class="tag">02 · Field ke rules</span>
+        <h2><code>Field</code> se kya karte hain?</h2>
+        <p><code>Field</code> se kisi value ki lambai, number ki seema, default value aur documentation ki jaankari de
+          sakte ho.</p>
+        <pre><code>from pydantic import BaseModel, Field
+
+class TicketInput(BaseModel):
+    subject: str = Field(min_length=1, max_length=120)
+    message: str = Field(min_length=10, max_length=4000)
+    customer_reference: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=64,
+    )</code></pre>
+        <ul>
+          <li><code>str | None</code> ka matlab value string bhi ho sakti hai aur <code>None</code> bhi.</li>
+          <li><code>= None</code> dene se request mein ye field bhejna zaroori nahi hota.</li>
+          <li><code>list[str] = Field(default_factory=list)</code> har naye model ke liye alag khaali list banata hai.
+            Seedha <code>= []</code> default mat do, warna models ke beech list share ho sakti hai.</li>
+        </ul>
+      </section>
+
+      <section id="config">
+        <span class="tag">03 · Model ki settings</span>
+        <h2><code>model_config</code>: poore model ke niyam</h2>
+        <p><code>model_config</code> Pydantic ko batata hai ki is model ke saare input ke saath kaise pesh aana hai. Ye
+          input ka field nahi, model ki setting hai.</p>
+        <pre><code>from pydantic import BaseModel, ConfigDict
+
+class TicketInput(BaseModel):
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        extra="forbid",
+    )
+
+    subject: str</code></pre>
+        <ul>
+          <li><code>str_strip_whitespace=True</code>: <code>"  Login  "</code> ke aage-peeche ki khaali jagah hata kar
+            <code>"Login"</code> banata hai.</li>
+          <li><code>extra="forbid"</code>: model mein na diye gaye keys, jaise <code>admin</code>, bhejne par error aata
+            hai.</li>
+          <li><code>from_attributes=True</code>: dictionary ke saath-saath Python/SQLAlchemy object ke attributes, jaise
+            <code>record.id</code>, se bhi values padhta hai.</li>
+        </ul>
+        <div class="note"><strong>Dhyan rahe:</strong> Pydantic ka input check login ya permission check nahi hai.
+          <code>extra="forbid"</code> anjaan input key ko rokta hai; ye nahi jaanchta ki user admin hai ya nahi.</div>
+      </section>
+
+      <section id="validators">
+        <span class="tag">04 · Apne validation rules</span>
+        <h2><code>field_validator</code> aur <code>model_validator</code></h2>
+        <div class="lesson">
+          <h3>Sirf ek field ke liye: <code>field_validator</code></h3>
+          <pre><code>from pydantic import BaseModel, field_validator
+
+class TicketInput(BaseModel):
+    subject: str
+
+    @field_validator("subject")
+    @classmethod
+    def clean_subject(cls, value: str) -&gt; str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Subject khaali nahi ho sakta")
+        return value</code></pre>
+          <p>Ye rule sirf <code>subject</code> ko saaf karta hai aur dekhta hai ki woh khaali to nahi. Badli hui value
+            ko <code>return</code> karna zaroori hai; wahi aage model mein jaati hai.</p>
+        </div>
+        <div class="lesson">
+          <h3>Do ya zyada fields ko saath check karne ke liye: <code>model_validator</code></h3>
+          <pre><code>from datetime import date
+from pydantic import BaseModel, model_validator
+
+class Booking(BaseModel):
+    start_date: date
+    end_date: date
+
+    @model_validator(mode="after")
+    def check_dates(self):
+        if self.end_date &lt; self.start_date:
+            raise ValueError("End date, start date se pehle nahi ho sakti")
+        return self</code></pre>
+          <p><code>mode="after"</code> mein dono fields parse hone ke baad validator ko poora model milta hai. Isliye
+            yahan dono dates ki tulna kar sakte hain.</p>
+        </div>
+      </section>
+
+      <section id="nested">
+        <span class="tag">05 · Ek model ke andar doosra model</span>
+        <h2>Nested model: Customer ka Address</h2>
+        <p>Jab ek model ke andar doosre model ka data rakhna ho, nested model banao. Customer khud Address nahi hota;
+          Customer ke paas Address hota hai.</p>
+        <pre><code>from pydantic import BaseModel
+
+class Address(BaseModel):
+    city: str
+    country: str
+
+class Customer(BaseModel):
+    name: str
+    address: Address
+
+customer = Customer.model_validate({
+    "name": "Asha",
+    "address": {"city": "Delhi", "country": "India"},
+})
+
+print(customer.address.city)  # Delhi</code></pre>
+        <p><code>Customer(Address)</code> likhne se <code>city</code> aur <code>country</code> Customer ke seedhe fields
+          ban jaate hain. Address ko andar rakhna ho to <code>address: Address</code> likho, jaise upar ki class mein
+          hai.</p>
+      </section>
+
+      <section id="inheritance">
+        <span class="tag">06 · Fields dobara istemal karna</span>
+        <h2>Inheritance: common fields share karo</h2>
+        <p>Agar create request aur response mein kuch fields same hon, to unhe base model mein likhkar dono models mein
+          inherit kar sakte ho.</p>
+        <pre><code>from pydantic import BaseModel, SecretStr, Field
+
+class UserBase(BaseModel):
+    name: str
+    email: str
+
+class UserCreate(UserBase):
+    password: SecretStr = Field(min_length=12)
+
+class UserResponse(UserBase):
+    id: int</code></pre>
+        <p><code>UserCreate</code> ko base se <code>name</code> aur <code>email</code> milte hain; usmein password bhi
+          hai. <code>UserResponse</code> ko wahi common fields aur ID milti hai, password nahi.</p>
+        <div class="good">Inheritance tab use karo jab models ke kuch fields same hon. Ek model ke andar doosra model
+          rakhna ho to nested field likho: <code>address: Address</code>.</div>
+      </section>
+
+      <section id="conversion">
+        <span class="tag">07 · Data ka aana-jaana</span>
+        <h2>Deserialize aur serialize karna</h2>
+        <p><strong>Deserialization:</strong> dictionary/JSON se Pydantic object banana aur uske data ko check karna.</p>
+        <pre><code>payload = {"name": "Asha", "email": "asha@example.com", "id": 42}
+user = UserResponse.model_validate(payload)
+
+json_text = '{"name":"Asha","email":"asha@example.com","id":42}'
+user_again = UserResponse.model_validate_json(json_text)</code></pre>
+        <p><strong>Serialization:</strong> Pydantic object ko dictionary ya JSON text mein badalna.</p>
+        <pre><code>python_dict = user.model_dump()
+json_text = user.model_dump_json()
+
+# None value wale optional fields hatane ke liye:
+clean_dict = user.model_dump(exclude_none=True)</code></pre>
+        <p>Project mein <a href="../src/backendfastapi/schemas/tickets.py">TicketResponse</a> ke config mein
+          <code>from_attributes=True</code> hai. Isse <code>TicketResponse.model_validate(record)</code> SQLAlchemy
+          object ke <code>record.id</code> jaise attributes padh sakta hai.</p>
+        <pre><code># SQLAlchemy object: from_attributes=True se attributes padhe jaate hain
+response = TicketResponse.model_validate(ticket_record)
+
+    # Dictionary: from_attributes ke bina bhi validate ho sakti hai
+response = TicketResponse.model_validate({
+    "id": 42,
+    "subject": "Login issue",
+    "message": "I cannot log in today.",
+    "customer_reference": None,
+    "status": "open",
+    "version": 1,
+    "created_at": created_at,
+})</code></pre>
+      </section>
+
+      <section id="practice">
+        <span class="tag">08 · Ab tum karke dekho</span>
+        <h2>Thoda abhyas karo</h2>
+        <ol>
+          <li><code>TicketInput</code> mein <code>priority</code> field jodo. Sirf <code>low</code>,
+            <code>normal</code>, ya <code>high</code> ko valid rakho.</li>
+          <li><code>subject</code> par <code>field_validator</code> lagao jo khaali jagah hataye. Sirf spaces wala input
+            bhejkar dekho kya hota hai.</li>
+          <li><code>model_dump()</code> aur <code>model_dump_json()</code> chalao. Dono ka output kaise alag hai?</li>
+          <li>Customer ke andar nested address rakho. Input se <code>country</code> hata kar validation error dekho.
+          </li>
+        </ol>
+        <p>Project tests chalao: <code>uv run pytest tests/test_main.py -k preview -q</code>.</p>
+        <p>Project ka asli example <a href="../src/backendfastapi/schemas/tickets.py">ticket schemas</a> mein dekho. Aur
+          padhna ho to <a href="02-pydantic-models.md">Pydantic lesson</a> ya <a href="learning-path.md">poora learning
+            path</a> kholo.</p>
+      </section>
+
+      <p class="back"><a href="../README.md">← Project README par wapas jao</a></p>
+    </main>
+    <footer>Revision notes · Pydantic v2 · Ye examples seekhne ke liye hain. Production mein apne input aur security
+      rules ke tests zaroor likho.</footer>
+  </body>
+
+</html>

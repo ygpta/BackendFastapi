@@ -1,0 +1,47 @@
+# Run behind a TLS-terminating gateway; this file is not a public ingress.
+services:
+  db:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a strong POSTGRES_PASSWORD}
+    ports: !reset []
+    restart: unless-stopped
+
+  migrate:
+    environment:
+      ENVIRONMENT: production
+      AUTH_ENABLED: "true"
+      REGISTRATION_ENABLED: "false"
+      JWT_SECRET: ${JWT_SECRET:?Set an independent random JWT_SECRET of at least 48 characters}
+      DATABASE_URL: ${DATABASE_URL:?Set the production asyncpg DATABASE_URL}
+      API_KEY: ${API_KEY:?Set a random API_KEY of at least 32 characters}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:?Set a JSON array of trusted host names}
+
+  api:
+    environment:
+      ENVIRONMENT: production
+      AUTH_ENABLED: "true"
+      REGISTRATION_ENABLED: "false"
+      JWT_SECRET: ${JWT_SECRET:?Set an independent random JWT_SECRET of at least 48 characters}
+      DATABASE_URL: ${DATABASE_URL:?Set the production asyncpg DATABASE_URL}
+      API_KEY: ${API_KEY:?Set a random API_KEY of at least 32 characters}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:?Set a JSON array of trusted host names}
+
+  checkpoint-setup:
+    environment:
+      ENVIRONMENT: production
+      AUTH_ENABLED: "true"
+      REGISTRATION_ENABLED: "false"
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      API_KEY: ${API_KEY:?Set API_KEY}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:?Set ALLOWED_HOSTS}
+
+  worker:
+    environment:
+      ENVIRONMENT: production
+      AUTH_ENABLED: "true"
+      REGISTRATION_ENABLED: "false"
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      API_KEY: ${API_KEY:?Set API_KEY}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:?Set ALLOWED_HOSTS}

@@ -1,0 +1,122 @@
+x-app-environment: &app-environment
+  APP_ENV_FILE: ""
+  ENVIRONMENT: ${ENVIRONMENT:-development}
+  DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://app:local_dev_password@db:5432/backendfastapi}
+  API_KEY: ${API_KEY:-}
+  ALLOWED_HOSTS: ${ALLOWED_HOSTS:-["localhost","127.0.0.1"]}
+  CORS_ORIGINS: ${CORS_ORIGINS:-[]}
+  CHAT_ENABLED: ${CHAT_ENABLED:-false}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-32768}
+  AUTH_ENABLED: ${AUTH_ENABLED:-false}
+  REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-false}
+  JWT_SECRET: ${JWT_SECRET:-}
+  REQUESTS_PER_MINUTE: ${REQUESTS_PER_MINUTE:-120}
+  MONTHLY_BUDGET_MICROUSD: ${MONTHLY_BUDGET_MICROUSD:-10000000}
+  MODEL_INPUT_PRICE_PER_MILLION_MICROUSD: ${MODEL_INPUT_PRICE_PER_MILLION_MICROUSD:-400000}
+  MODEL_OUTPUT_PRICE_PER_MILLION_MICROUSD: ${MODEL_OUTPUT_PRICE_PER_MILLION_MICROUSD:-1600000}
+  OTEL_ENABLED: ${OTEL_ENABLED:-false}
+  OTEL_ENDPOINT: ${OTEL_ENDPOINT:-http://otel-collector:4318/v1/traces}
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-backendfastapi}
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local_dev_password}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    build: .
+    environment: *app-environment
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build: .
+    environment: *app-environment
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2)
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    stop_grace_period: 45s
+    cpus: 1.0
+    mem_limit: 512m
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  checkpoint-setup:
+    build: .
+    profiles: [agent]
+    environment: *app-environment
+    command: ["python", "-m", "backendfastapi.worker", "--setup"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+    healthcheck:
+      disable: true
+
+  worker:
+    build: .
+    profiles: [agent]
+    environment: *app-environment
+    command: ["python", "-m", "backendfastapi.worker"]
+    depends_on:
+      checkpoint-setup:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    stop_grace_period: 45s
+    mem_limit: 768m
+    cpus: 1.0
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9001/metrics', timeout=2)"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  postgres_data:

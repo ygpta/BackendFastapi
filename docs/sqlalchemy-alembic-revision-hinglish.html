@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="hi-Latn">
+
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description"
+      content="Is FastAPI project ke code se SQLAlchemy ORM, async sessions, transactions aur Alembic migrations Hinglish mein seekho.">
+    <title>SQLAlchemy aur Alembic | Hinglish Revision</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #172b34;
+        --muted: #52656b;
+        --paper: #f3f7f5;
+        --surface: #ffffff;
+        --line: #d5e2dc;
+        --green: #176b55;
+        --green-soft: #e3f2eb;
+        --orange: #a84c24;
+        --orange-soft: #fff0e6;
+        --code: #10242b;
+        --code-ink: #e8f3ef;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: var(--paper);
+        font-family: Georgia, "Times New Roman", serif;
+        line-height: 1.65;
+      }
+
+      a {
+        color: var(--green);
+        text-underline-offset: 3px;
+      }
+
+      .masthead {
+        border-bottom: 1px solid var(--line);
+        background: var(--surface);
+      }
+
+      .masthead-inner,
+      main,
+      footer {
+        width: min(100% - 36px, 920px);
+        margin-inline: auto;
+      }
+
+      .masthead-inner {
+        padding: 22px 0 18px;
+      }
+
+      .eyebrow,
+      .tag {
+        color: var(--green);
+        font-family: Arial, sans-serif;
+        font-size: .78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3 {
+        line-height: 1.2;
+      }
+
+      h1 {
+        max-width: 760px;
+        margin: 8px 0;
+        font-size: clamp(2.1rem, 7vw, 4rem);
+      }
+
+      h2 {
+        margin: 0 0 12px;
+        font-size: 1.8rem;
+      }
+
+      h3 {
+        margin: 0 0 8px;
+        font-size: 1.2rem;
+      }
+
+      p {
+        margin: 8px 0 14px;
+      }
+
+      .lede {
+        max-width: 720px;
+        color: var(--muted);
+        font-size: 1.1rem;
+      }
+
+      main {
+        padding: 24px 0 60px;
+      }
+
+      .toc {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 18px;
+        padding: 14px 18px;
+        margin: 8px 0 28px;
+        border-left: 4px solid var(--green);
+        background: var(--green-soft);
+        font-family: Arial, sans-serif;
+        font-size: .92rem;
+      }
+
+      section {
+        margin: 0 0 38px;
+        scroll-margin-top: 16px;
+      }
+
+      .lesson {
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--surface);
+      }
+
+      .lesson+.lesson {
+        margin-top: 14px;
+      }
+
+      .note,
+      .good {
+        padding: 12px 15px;
+      }
+
+      .note {
+        border-left: 4px solid var(--orange);
+        background: var(--orange-soft);
+      }
+
+      .good {
+        border-left: 4px solid var(--green);
+        background: var(--green-soft);
+      }
+
+      code,
+      pre {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      }
+
+      :not(pre)>code {
+        padding: 1px 5px;
+        border-radius: 3px;
+        background: #edf2ef;
+        font-size: .9em;
+      }
+
+      pre {
+        overflow-x: auto;
+        padding: 17px;
+        border-radius: 5px;
+        color: var(--code-ink);
+        background: var(--code);
+        font-size: .88rem;
+        line-height: 1.55;
+        tab-size: 4;
+      }
+
+      ul,
+      ol {
+        padding-left: 1.3rem;
+      }
+
+      li {
+        margin: 5px 0;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--surface);
+      }
+
+      th,
+      td {
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: var(--green-soft);
+      }
+
+      .back {
+        font-family: Arial, sans-serif;
+        font-size: .92rem;
+      }
+
+      footer {
+        padding: 0 0 32px;
+        color: var(--muted);
+        font-family: Arial, sans-serif;
+        font-size: .9rem;
+      }
+
+      @media (max-width: 600px) {
+
+        .masthead-inner,
+        main,
+        footer {
+          width: min(100% - 24px, 920px);
+        }
+
+        .lesson {
+          padding: 16px;
+        }
+
+        th,
+        td {
+          padding: 8px;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <header class="masthead">
+      <div class="masthead-inner">
+        <div class="eyebrow">BackendFastapi · Database Revision</div>
+        <h1>SQLAlchemy aur Alembic, Hinglish mein</h1>
+        <p class="lede">Project ke Ticket example se seekho: Python class database table se kaise map hoti hai, async
+          session query kaise chalata hai, transaction kab commit hota hai, aur migration existing database ko kaise
+          update karti hai.</p>
+      </div>
+    </header>
+    <main>
+      <nav class="toc" aria-label="Is page ke topics">
+        <a href="#map">Basic map</a>
+        <a href="#model">ORM model</a>
+        <a href="#engine">Engine aur session</a>
+        <a href="#crud">Create, read, update</a>
+        <a href="#transaction">Transaction</a>
+        <a href="#alembic">Alembic</a>
+        <a href="#commands">Commands</a>
+        <a href="#practice">Abhyas</a>
+      </nav>
+
+      <section id="map">
+        <span class="tag">01 · Shuruaat</span>
+        <h2>Database ke basic shabd</h2>
+        <ul>
+          <li><strong>Database:</strong> data rakhne ki jagah; is project mein PostgreSQL.</li>
+          <li><strong>Table:</strong> ek jaise records ka collection, jaise <code>tickets</code>.</li>
+          <li><strong>Row:</strong> table mein ek record, jaise ek support ticket.</li>
+          <li><strong>Column:</strong> record ka ek field, jaise <code>subject</code> ya <code>status</code>.</li>
+          <li><strong>ORM:</strong> Python objects ke zariye SQL database ke saath kaam karna.</li>
+        </ul>
+        <p>SQL mein ticket dhoondhne ka ek example:</p>
+        <pre><code>SELECT id, subject, status
+FROM tickets
+WHERE id = 42;</code></pre>
+        <p>SQLAlchemy ORM mein isi ka Python-style roop:</p>
+        <pre><code>statement = select(Ticket).where(Ticket.id == 42)
+record = await session.scalar(statement)</code></pre>
+        <p>ORM SQL ko khatam nahi karta. ORM tumhare Python expression ko SQL mein badalta hai aur result ko Python
+          object ke roop mein deta hai.</p>
+      </section>
+
+      <section id="model">
+        <span class="tag">02 · Table ka Python roop</span>
+        <h2>SQLAlchemy model kya hai?</h2>
+        <p>Project ka model <a href="../src/backendfastapi/db/models/support.py"><code>Ticket</code></a> class hai. Ye
+          database mein <code>tickets</code> table ka structure describe karta hai.</p>
+        <pre><code>class Ticket(TenantScoped, Base):
+    __tablename__ = "tickets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    subject: Mapped[str] = mapped_column(String(120))
+    message: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(
+        String(16), default="open", server_default="open"
+    )</code></pre>
+        <ul>
+          <li><code>Base</code>: SQLAlchemy ke sab models ka common base aur metadata registry.</li>
+          <li><code>__tablename__</code>: actual database table ka naam.</li>
+          <li><code>Mapped[str]</code>: Python mein field ka expected type.</li>
+          <li><code>mapped_column(...)</code>: database column aur uske rules.</li>
+          <li><code>primary_key=True</code>: row ki unique pehchaan.</li>
+          <li><code>String(120)</code> aur <code>Text</code>: database column ke types.</li>
+        </ul>
+        <p><code>Ticket(...)</code> ek Python ORM object banata hai. Ye apne-aap database mein save nahi hota:</p>
+        <pre><code>ticket = Ticket(
+    subject="Login issue",
+    message="I cannot log in today.",
+)
+
+print(ticket.subject)  # Login issue</code></pre>
+        <div class="note"><strong>Yaad rakho:</strong> Pydantic request schema input validate karta hai. SQLAlchemy
+          model table/row represent karta hai. Dono ka kaam alag hai.</div>
+      </section>
+
+      <section id="engine">
+        <span class="tag">03 · Connection aur session</span>
+        <h2>Engine aur SessionFactory</h2>
+        <p><a href="../src/backendfastapi/db/session.py"><code>session.py</code></a> mein engine connection pool banata
+          hai. Pool database connections ko reuse karta hai, taaki har request par naya connection banana na pade.</p>
+        <pre><code>engine = create_async_engine(
+    settings.database_url,
+    pool_pre_ping=True,
+    pool_size=settings.database_pool_size,
+)
+SessionFactory = async_sessionmaker(
+    engine,
+    expire_on_commit=False,
+)</code></pre>
+        <ul>
+          <li><code>database_url</code>: database tak pahunchne ka connection address. Secret URL ko logs mein mat
+            dikhana.</li>
+          <li><code>pool_pre_ping=True</code>: use se pehle check karta hai ki pooled connection abhi zinda hai.</li>
+          <li><code>SessionFactory</code>: har request ya kaam ke liye naya <code>AsyncSession</code> banata hai.</li>
+          <li><code>expire_on_commit=False</code>: commit ke baad loaded object ke fields ko turant expire nahi karta.
+          </li>
+        </ul>
+        <p><a href="../src/backendfastapi/api/deps.py"><code>get_db_session</code></a> session request ko deta hai aur
+          request khatam hone par close karta hai. Tenant ID bhi yahin verified user se session mein daali jaati hai.
+        </p>
+        <pre><code>async def get_db_session(principal):
+    async with SessionFactory() as session:
+        session.info["tenant_id"] = principal.tenant_id
+        yield session</code></pre>
+      </section>
+
+      <section id="crud">
+        <span class="tag">04 · CRUD ka code flow</span>
+        <h2>Create, read, list aur update</h2>
+        <p>CRUD ka matlab Create, Read, Update, Delete. Ticket repository yahan hai: <a
+            href="../src/backendfastapi/repositories/tickets.py">repositories/tickets.py</a>.</p>
+        <div class="lesson">
+          <h3>Create</h3>
+          <pre><code>record = Ticket(**data.model_dump())
+session.add(record)
+await session.flush()
+await session.commit()</code></pre>
+          <p><code>model_dump()</code> Pydantic input ko dictionary banata hai. <code>Ticket(**...)</code> dictionary ke
+            keys ko model constructor ke arguments banata hai. <code>add</code> object ko session mein register karta
+            hai.</p>
+        </div>
+        <div class="lesson">
+          <h3>Read</h3>
+          <pre><code>statement = select(Ticket).where(Ticket.id == ticket_id)
+result = await session.execute(statement)
+record = result.scalar_one_or_none()</code></pre>
+          <p><code>scalar_one_or_none()</code> ek matching Ticket deta hai ya match na ho to <code>None</code>. Endpoint
+            <code>None</code> par HTTP <code>404</code> return karta hai.</p>
+        </div>
+        <div class="lesson">
+          <h3>List aur pagination</h3>
+          <pre><code>statement = (
+    select(Ticket)
+    .where(Ticket.id &lt; before_id)
+    .order_by(Ticket.id.desc())
+    .limit(limit + 1)
+)</code></pre>
+          <p><code>where</code> filter hai, <code>order_by</code> sorting hai. Ek extra row mangkar code jaan leta hai
+            ki agla page hai ya nahi—har baar total count nikalne ki zaroorat nahi.</p>
+        </div>
+        <div class="lesson">
+          <h3>Update aur version check</h3>
+          <pre><code>statement = (
+    update(Ticket)
+    .where(
+        Ticket.id == ticket_id,
+        Ticket.version == expected_version,
+    )
+    .values(
+        status=new_status,
+        version=Ticket.version + 1,
+    )
+    .returning(Ticket)
+)</code></pre>
+          <p>ID ke saath purana version bhi match hona chahiye. Agar kisi aur ne pehle update kar diya, row match nahi
+            hogi aur app <code>409 Conflict</code> dega. Isse stale screen se doosre ka update chupke se overwrite nahi
+            hota.</p>
+        </div>
+      </section>
+
+      <section id="transaction">
+        <span class="tag">05 · Transaction</span>
+        <h2><code>add</code>, <code>flush</code>, <code>commit</code> mein farq</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Asaan matlab</th>
+              <th>Kya final save hua?</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>session.add(obj)</code></td>
+              <td>Object ko session ke pending kaam mein jodo.</td>
+              <td>Nahi</td>
+            </tr>
+            <tr>
+              <td><code>await session.flush()</code></td>
+              <td>Pending SQL database ko bhejo; generated ID mil sakti hai.</td>
+              <td>Abhi nahi, transaction open hai.</td>
+            </tr>
+            <tr>
+              <td><code>await session.commit()</code></td>
+              <td>Transaction confirm karo.</td>
+              <td>Haan</td>
+            </tr>
+            <tr>
+              <td><code>await session.rollback()</code></td>
+              <td>Current uncommitted changes cancel karo.</td>
+              <td>Nahi, changes discard hote hain.</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>Project create ke baad <code>flush()</code> karta hai, kyunki audit record ko ticket ID chahiye. Phir ticket
+          aur audit dono ko ek transaction mein commit kiya jaata hai. Transaction fail hui to dono changes saath
+          rollback ho sakte hain.</p>
+        <div class="good">Har repository function ko apna commit karna zaroori nahi. Idempotent ticket create mein
+          service ticket aur replay response ko ek saath commit karne ke liye repository ko <code>commit=False</code>
+          deti hai.</div>
+      </section>
+
+      <section id="alembic">
+        <span class="tag">06 · Schema ka history</span>
+        <h2>Alembic kis kaam aata hai?</h2>
+        <p>Model code aaj ka desired table structure batata hai. Alembic migration database ko purane structure se naye
+          structure tak le jaane ke step likhti hai. Jaise migration <a href="../migrations/versions/0001_create_tickets.py">0001</a>
+          tickets table banati hai; <a href="../migrations/versions/0003_ticket_management.py">0003</a> status/version columns aur
+          index add karti hai.</p>
+        <pre><code>revision = "0003"
+down_revision = "0002"
+
+def upgrade():
+    op.add_column("tickets", ...)
+    op.create_check_constraint(...)
+    op.create_index(...)
+
+def downgrade():
+    op.drop_index(...)
+    op.drop_constraint(...)
+    op.drop_column(...)</code></pre>
+        <ul>
+          <li><code>revision</code>: is migration ka ID.</li>
+          <li><code>down_revision</code>: isse pehle ka migration. Is tarah Alembic ko order pata chalta hai.</li>
+          <li><code>upgrade()</code>: schema ko aage badhata hai.</li>
+          <li><code>downgrade()</code>: schema change reverse karta hai; column drop karna data delete kar sakta hai, so
+            production mein soch samajhkar.</li>
+        </ul>
+        <p><a href="../migrations/env.py">migrations/env.py</a> models ka <code>Base.metadata</code> Alembic ko deta hai aur settings
+          se DB URL padhta hai. Migration history ko edit/delete mat karo; naya change ho to nayi revision banao.</p>
+        <div class="note"><strong>Important:</strong> Production API startup har worker mein <code>create_all()</code>
+          nahi chalata. Compose ka alag <code>migrate</code> job Alembic ko ek baar chalata hai.</div>
+      </section>
+
+      <section id="commands">
+        <span class="tag">07 · Roz ke commands</span>
+        <h2>Migration ka workflow</h2>
+        <pre><code># Current DB revision dekho
+uv run alembic current
+
+# Saari revision history dekho
+uv run alembic history
+
+# Model change ke baad migration draft banao
+uv run alembic revision --autogenerate -m "add ticket priority"
+
+# Generated migration review karne ke baad apply karo
+uv run alembic upgrade head
+
+# Check karo model aur DB schema match hain ya nahi
+uv run alembic check</code></pre>
+        <p><code>--autogenerate</code> draft banata hai; generated file ko padhna aur test karna tumhari responsibility
+          hai. Har schema change automatically safe nahi hota.</p>
+        <div class="note"><strong>Test safety:</strong> <a href="../tests/test_postgres.py">test_postgres.py</a>
+          database ko downgrade karke migration dobara chalata hai. Ise sirf disposable test PostgreSQL par
+          chalao—production ya valuable local DB par nahi.</div>
+      </section>
+
+      <section id="practice">
+        <span class="tag">08 · Abhyas</span>
+        <h2>Khud code trace karo</h2>
+        <ol>
+          <li><a href="../src/backendfastapi/api/v1/endpoints/tickets.py">Ticket endpoint</a> se <a
+              href="../src/backendfastapi/services/tickets.py">service</a> aur phir <a
+              href="../src/backendfastapi/repositories/tickets.py">repository</a> tak create flow follow karo.</li>
+          <li><a href="../src/backendfastapi/db/models/support.py">Ticket model</a> mein har column ka SQL type aur
+            nullable/default rule pehchano.</li>
+          <li><a href="../tests/test_main.py">test_main.py</a> mein create/read test chalao. Predict karo ID kis step ke
+            baad milti hai aur save kab final hota hai.</li>
+          <li>Sirf disposable DB mein status ka naya value add karne ka migration draft banao. Model constraint aur
+            database constraint dono update karne honge.</li>
+        </ol>
+        <pre><code>uv run pytest tests/test_main.py -k create_and_read_ticket -q</code></pre>
+        <p>Connection chahiye ho to pehle <a href="../README.md">README se app start karo</a>. SQLAlchemy model
+          Python-side mapping hai; Alembic migration live schema ka versioned change hai.</p>
+      </section>
+
+      <p class="back"><a href="../README.md">← Project README par wapas jao</a> · <a href="learning-path.md">Learning
+          path</a></p>
+    </main>
+    <footer>SQLAlchemy 2.x aur Alembic ke revision notes · Hinglish explanations · Examples isi project ke code se
+    </footer>
+  </body>
+
+</html>
